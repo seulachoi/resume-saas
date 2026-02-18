@@ -18,7 +18,7 @@ export default function AnalyzeTestPage() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText, jdText }),
+        body: JSON.stringify({ resumeText, jdText, mode: "preview" }),
       });
 
       const data = await res.json();
