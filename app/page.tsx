@@ -126,7 +126,7 @@ export default function HomePage() {
     <main className="max-w-4xl mx-auto p-8 space-y-12">
       {/* Landing */}
       <section className="space-y-4">
-        <h1 className="text-4xl font-bold">ResumeUp</h1>
+        <h1 className="text-4xl font-bold">ResumeUp v2</h1>
         <p className="text-lg text-gray-600">
           AI-powered ATS resume optimization for global job seekers.
         </p>
