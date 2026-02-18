@@ -5,12 +5,37 @@ import { useEffect, useState } from "react";
 const LEMON_CHECKOUT_URL =
   "https://resumeup.lemonsqueezy.com/checkout/buy/bc5b3827-7a9e-4fb6-a9ed-5b073009d0ff";
 
+const LS_RESUME_KEY = "resumeup_resumeText";
+const LS_JD_KEY = "resumeup_jdText";
+
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Restore inputs on first load (so they survive checkout redirect)
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem(LS_RESUME_KEY) || "";
+      const j = localStorage.getItem(LS_JD_KEY) || "";
+      if (r) setResumeText(r);
+      if (j) setJdText(j);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist inputs whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_RESUME_KEY, resumeText);
+      localStorage.setItem(LS_JD_KEY, jdText);
+    } catch {
+      // ignore
+    }
+  }, [resumeText, jdText]);
 
   const callAnalyze = async (mode: "preview" | "full") => {
     setLoading(true);
@@ -39,8 +64,10 @@ export default function HomePage() {
   };
 
   const unlockWithLemon = () => {
-    // Lemon supports success_url query param
     const successUrl = `${window.location.origin}/?unlocked=1`;
+
+    // Pass a success url to Lemon (supported in many setups).
+    // Even if Lemon ignores it, you can also configure redirects in Lemon's product settings.
     const url =
       `${LEMON_CHECKOUT_URL}` +
       `?success_url=${encodeURIComponent(successUrl)}` +
@@ -49,21 +76,55 @@ export default function HomePage() {
     window.location.href = url;
   };
 
-  // If redirected back with ?unlocked=1, run FULL (user must have inputs)
+  // After returning from checkout (?unlocked=1), auto-run FULL using values saved in localStorage
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const unlocked = params.get("unlocked");
 
     if (unlocked === "1") {
-      if (resumeText.length >= 200 && jdText.length >= 200) {
-        callAnalyze("full");
-      } else {
-        setError(
-          "Payment success detected. Please paste your resume & job description again, then click Run Analyze (Preview)."
-        );
-      }
+      setTimeout(async () => {
+        let r = "";
+        let j = "";
+
+        try {
+          r = localStorage.getItem(LS_RESUME_KEY) || "";
+          j = localStorage.getItem(LS_JD_KEY) || "";
+        } catch {
+          // ignore
+        }
+
+        if (r.length >= 200 && j.length >= 200) {
+          // ensure UI reflects restored values
+          setResumeText(r);
+          setJdText(j);
+
+          setLoading(true);
+          setError(null);
+          try {
+            const res = await fetch("/api/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ resumeText: r, jdText: j, mode: "full" }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || "Request failed");
+            setResult(data);
+          } catch (e: any) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        } else {
+          setError(
+            "Payment success detected. Please paste your resume & job description again, then click Run Analyze (Preview)."
+          );
+        }
+
+        // Clean URL and jump to analyzer section
+        window.history.replaceState({}, "", window.location.pathname + "#analyzer");
+      }, 50);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -157,8 +218,8 @@ export default function HomePage() {
                 </button>
 
                 <p className="text-xs text-gray-500">
-                  After payment, you will be redirected back to this page. If
-                  your inputs are cleared, paste them again and rerun preview.
+                  After payment, you will be redirected back here and your inputs
+                  should be restored automatically.
                 </p>
               </div>
             ) : (
