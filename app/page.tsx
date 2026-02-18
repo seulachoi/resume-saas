@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-declare global {
-  interface Window {
-    Paddle?: any;
-  }
-}
+const LEMON_CHECKOUT_URL =
+  "https://resumeup.lemonsqueezy.com/checkout/buy/bc5b3827-7a9e-4fb6-a9ed-5b073009d0ff";
 
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
@@ -14,45 +11,6 @@ export default function HomePage() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const paddleToken = useMemo(
-    () => process.env.NEXT_PUBLIC_PADDLE_TOKEN || "",
-    []
-  );
-  const paddlePriceId = useMemo(
-    () => process.env.NEXT_PUBLIC_PADDLE_PRICE_ID || "",
-    []
-  );
-  const baseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_BASE_URL || "",
-    []
-  );
-
-  // Load Paddle script (for Unlock)
-  useEffect(() => {
-    const init = () => {
-      if (!window.Paddle) return;
-      if (!paddleToken) return;
-      try {
-        window.Paddle.Initialize({ token: paddleToken });
-      } catch {}
-    };
-
-    const existing = document.querySelector(
-      'script[src="https://cdn.paddle.com/paddle/v2/paddle.js"]'
-    ) as HTMLScriptElement | null;
-
-    if (existing) {
-      init();
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-    script.async = true;
-    script.onload = init;
-    document.body.appendChild(script);
-  }, [paddleToken]);
 
   const callAnalyze = async (mode: "preview" | "full") => {
     setLoading(true);
@@ -80,42 +38,28 @@ export default function HomePage() {
     await callAnalyze("preview");
   };
 
-  const unlock = () => {
-    if (!paddleToken) {
-      setError("Paddle token is missing (NEXT_PUBLIC_PADDLE_TOKEN).");
-      return;
-    }
-    if (!paddlePriceId) {
-      setError("Paddle price id is missing (NEXT_PUBLIC_PADDLE_PRICE_ID).");
-      return;
-    }
-    if (!baseUrl) {
-      setError("Base URL missing (NEXT_PUBLIC_BASE_URL).");
-      return;
-    }
-    if (!window.Paddle?.Checkout?.open) {
-      setError("Paddle is not ready yet. Please try again in a moment.");
-      return;
-    }
+  const unlockWithLemon = () => {
+    // Lemon supports success_url query param
+    const successUrl = `${window.location.origin}/?unlocked=1`;
+    const url =
+      `${LEMON_CHECKOUT_URL}` +
+      `?success_url=${encodeURIComponent(successUrl)}` +
+      `&checkout[custom][source]=resumeup_mvp`;
 
-    window.Paddle.Checkout.open({
-      items: [{ priceId: paddlePriceId }],
-      settings: {
-        successUrl: `${baseUrl}/?unlocked=1`,
-      },
-    });
+    window.location.href = url;
   };
 
   // If redirected back with ?unlocked=1, run FULL (user must have inputs)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const unlocked = params.get("unlocked");
+
     if (unlocked === "1") {
       if (resumeText.length >= 200 && jdText.length >= 200) {
         callAnalyze("full");
       } else {
         setError(
-          "Payment success detected. Paste resume & job description, then run preview again."
+          "Payment success detected. Please paste your resume & job description again, then click Run Analyze (Preview)."
         );
       }
     }
@@ -126,7 +70,7 @@ export default function HomePage() {
     <main className="max-w-4xl mx-auto p-8 space-y-12">
       {/* Landing */}
       <section className="space-y-4">
-        <h1 className="text-4xl font-bold">ResumeUp v2</h1>
+        <h1 className="text-4xl font-bold">ResumeUp</h1>
         <p className="text-lg text-gray-600">
           AI-powered ATS resume optimization for global job seekers.
         </p>
@@ -134,16 +78,20 @@ export default function HomePage() {
           ResumeUp analyzes your resume against a job description and provides
           keyword alignment insights and a fully rewritten ATS-optimized version.
         </p>
-        <a href="#analyzer" className="inline-block px-6 py-3 bg-black text-white rounded">
+        <a
+          href="#analyzer"
+          className="inline-block px-6 py-3 bg-black text-white rounded"
+        >
           Try Resume Analyzer
         </a>
       </section>
 
-      {/* Analyzer (Input form on landing) */}
+      {/* Analyzer */}
       <section id="analyzer" className="space-y-4">
         <h2 className="text-2xl font-semibold">Resume Analyzer</h2>
         <p className="text-sm text-gray-600">
-          Paste your resume and job description to get a preview ATS score and keyword gaps.
+          Paste your resume and job description to get a preview ATS score and
+          keyword gaps. Unlock to generate the full rewritten resume.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -197,15 +145,21 @@ export default function HomePage() {
               <div className="p-4 border rounded space-y-3">
                 <div className="text-lg font-medium">Full Rewrite (Locked)</div>
                 <p className="text-sm text-gray-600">
-                  Unlock to generate and view the full ATS-aligned rewritten resume.
+                  Unlock to generate and view the full ATS-aligned rewritten
+                  resume.
                 </p>
 
                 <button
                   className="px-4 py-2 rounded border bg-black text-white w-fit"
-                  onClick={unlock}
+                  onClick={unlockWithLemon}
                 >
-                  Unlock Full Resume ($2)
+                  Unlock Full Resume (₩1,000 / ~$2)
                 </button>
+
+                <p className="text-xs text-gray-500">
+                  After payment, you will be redirected back to this page. If
+                  your inputs are cleared, paste them again and rerun preview.
+                </p>
               </div>
             ) : (
               <div className="p-4 border rounded">
@@ -224,7 +178,7 @@ export default function HomePage() {
         <h2 className="text-2xl font-semibold">Pricing</h2>
         <div className="border p-6 rounded space-y-2">
           <h3 className="text-xl font-medium">Full Resume Rewrite</h3>
-          <p>$2.00 one-time payment</p>
+          <p>₩1,000 (~$2) one-time payment</p>
           <ul className="list-disc pl-6 text-sm text-gray-600">
             <li>ATS keyword analysis</li>
             <li>Keyword gap report</li>
@@ -238,8 +192,8 @@ export default function HomePage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold">About ResumeUp</h2>
         <p>
-          ResumeUp is an independent AI-driven resume optimization service designed
-          for global professionals applying to international roles.
+          ResumeUp is an independent AI-driven resume optimization service
+          designed for global professionals applying to international roles.
         </p>
         <p>
           We leverage advanced language models to help candidates improve keyword
