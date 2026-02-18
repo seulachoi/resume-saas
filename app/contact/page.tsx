@@ -8,11 +8,9 @@ export default function ContactPage() {
         </p>
   
         <p>
-          Email: peach43054@gmail.com
-        </p>
-  
-        <p>
-          Business Owner: Seula Choi
+        Business Owner: Seula Choi
+        Location: Republic of Korea
+        Email: peach43054@gmail.com
         </p>
       </main>
     );

@@ -25,6 +25,17 @@ export default function TermsPage() {
         <p className="text-sm text-gray-500">
           Operated by Seula Choi.
         </p>
+        <h2>Business Information</h2>
+        <p>
+        This service is operated by Seula Choi as a sole proprietor based in South Korea.
+        Contact: peach43054@gmail.com
+        </p>
+
+        <h2>Governing Law</h2>
+        <p>
+        These terms shall be governed by the laws of the Republic of Korea.
+        </p>
+
       </main>
     );
   }
