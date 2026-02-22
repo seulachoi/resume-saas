@@ -83,22 +83,35 @@ function computeMatched(all: string[], missing: string[]) {
 
 export default async function ResultsPage({ params }: { params: { sid: string } }) {
   const sb = supabaseServer();
-  const { data: session } = await sb
-    .from("checkout_sessions")
-    .select("status, result_json, ats_before, ats_after, created_at")
-    .eq("id", params.sid)
-    .single();
+  const { data: session, error } = await sb
+  .from("checkout_sessions")
+  .select("status, result_json, ats_before, ats_after, created_at")
+  .eq("id", params.sid)
+  .single();
 
-  if (!session) {
-    return (
-      <main className="min-h-screen bg-white p-10">
-        <div className="mx-auto max-w-3xl">
-          <h1 className="text-2xl font-semibold text-slate-900">Result not found</h1>
-          <p className="mt-2 text-slate-600">Invalid link or expired session.</p>
-        </div>
-      </main>
-    );
-  }
+if (error) {
+  return (
+    <main className="min-h-screen bg-white p-10">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="text-2xl font-semibold text-slate-900">Results load failed</h1>
+        <p className="mt-2 text-slate-600">{error.message}</p>
+        <p className="mt-2 text-xs text-slate-500 font-mono">sid: {params.sid}</p>
+      </div>
+    </main>
+  );
+}
+
+if (!session) {
+  return (
+    <main className="min-h-screen bg-white p-10">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="text-2xl font-semibold text-slate-900">Result not found</h1>
+        <p className="mt-2 text-slate-600">No session row returned.</p>
+        <p className="mt-2 text-xs text-slate-500 font-mono">sid: {params.sid}</p>
+      </div>
+    </main>
+  );
+}
 
   if (session.status !== "fulfilled" || !session.result_json) {
     return (
