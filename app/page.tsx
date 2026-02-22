@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-const LEMON_CHECKOUT_URL =
-  "https://resumeup.lemonsqueezy.com/checkout/buy/bc5b3827-7a9e-4fb6-a9ed-5b073009d0ff";
-
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
+const LS_SID_KEY = "resumeup_sid";
 
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
@@ -15,7 +13,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Restore inputs on first load (so they survive checkout redirect)
+  // Restore inputs on first load
   useEffect(() => {
     try {
       const r = localStorage.getItem(LS_RESUME_KEY) || "";
@@ -37,15 +35,25 @@ export default function HomePage() {
     }
   }, [resumeText, jdText]);
 
-  const callAnalyze = async (mode: "preview" | "full") => {
+  const callAnalyze = async (mode: "preview" | "full", override?: { r: string; j: string }) => {
     setLoading(true);
     setError(null);
 
     try {
+      const r = override?.r ?? resumeText;
+      const j = override?.j ?? jdText;
+
+      const sid = mode === "full" ? localStorage.getItem(LS_SID_KEY) : null;
+
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText, jdText, mode }),
+        body: JSON.stringify({
+          resumeText: r,
+          jdText: j,
+          mode,
+          sid, // ✅ full일 때만 필요
+        }),
       });
 
       const data = await res.json();
@@ -63,20 +71,40 @@ export default function HomePage() {
     await callAnalyze("preview");
   };
 
-  const unlockWithLemon = () => {
-    const successUrl = `${window.location.origin}/?unlocked=1`;
+  // ✅ Create checkout session on server (sid + checkoutUrl)
+  const unlockWithLemon = async () => {
+    setError(null);
 
-    // Pass a success url to Lemon (supported in many setups).
-    // Even if Lemon ignores it, you can also configure redirects in Lemon's product settings.
-    const url =
-      `${LEMON_CHECKOUT_URL}` +
-      `?success_url=${encodeURIComponent(successUrl)}` +
-      `&checkout[custom][source]=resumeup_mvp`;
+    if (!result || result.mode !== "preview") {
+      setError("Run preview first.");
+      return;
+    }
 
-    window.location.href = url;
+    try {
+      const res = await fetch("/api/checkout/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeText,
+          jdText,
+          atsBefore: result.atsScore,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Checkout creation failed");
+
+      // Save sid for full verification
+      localStorage.setItem(LS_SID_KEY, data.sid);
+
+      // Redirect to Lemon checkout
+      window.location.href = data.checkoutUrl;
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
-  // After returning from checkout (?unlocked=1), auto-run FULL using values saved in localStorage
+  // After returning from checkout (?unlocked=1), auto-run FULL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const unlocked = params.get("unlocked");
@@ -94,37 +122,21 @@ export default function HomePage() {
         }
 
         if (r.length >= 200 && j.length >= 200) {
-          // ensure UI reflects restored values
           setResumeText(r);
           setJdText(j);
-
-          setLoading(true);
-          setError(null);
-          try {
-            const res = await fetch("/api/analyze", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ resumeText: r, jdText: j, mode: "full" }),
-            });
-
-            const data = await res.json();
-            if (!res.ok) throw new Error(data?.error || "Request failed");
-            setResult(data);
-          } catch (e: any) {
-            setError(e.message);
-          } finally {
-            setLoading(false);
-          }
+          // ✅ full 호출 시 sid는 callAnalyze 내부에서 localStorage에서 읽어서 포함됨
+          await callAnalyze("full", { r, j });
         } else {
           setError(
             "Payment success detected. Please paste your resume & job description again, then click Run Analyze (Preview)."
           );
         }
 
-        // Clean URL and jump to analyzer section
+        // Clean URL and jump to analyzer
         window.history.replaceState({}, "", window.location.pathname + "#analyzer");
       }, 50);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -136,13 +148,10 @@ export default function HomePage() {
           AI-powered ATS resume optimization for global job seekers.
         </p>
         <p>
-          ResumeUp analyzes your resume against a job description and provides
-          keyword alignment insights and a fully rewritten ATS-optimized version.
+          ResumeUp analyzes your resume against a job description and provides keyword alignment insights and a fully
+          rewritten ATS-optimized version.
         </p>
-        <a
-          href="#analyzer"
-          className="inline-block px-6 py-3 bg-black text-white rounded"
-        >
+        <a href="#analyzer" className="inline-block px-6 py-3 bg-black text-white rounded">
           Try Resume Analyzer
         </a>
       </section>
@@ -151,8 +160,8 @@ export default function HomePage() {
       <section id="analyzer" className="space-y-4">
         <h2 className="text-2xl font-semibold">Resume Analyzer</h2>
         <p className="text-sm text-gray-600">
-          Paste your resume and job description to get a preview ATS score and
-          keyword gaps. Unlock to generate the full rewritten resume.
+          Paste your resume and job description to get a preview ATS score and keyword gaps. Unlock to generate the full
+          rewritten resume.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -197,37 +206,28 @@ export default function HomePage() {
 
             <div className="p-4 border rounded">
               <div className="text-lg font-medium mb-2">Keyword Gaps</div>
-              <pre className="whitespace-pre-wrap text-sm">
-                {JSON.stringify(result.gaps, null, 2)}
-              </pre>
+              <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(result.gaps, null, 2)}</pre>
             </div>
 
             {result.mode === "preview" ? (
               <div className="p-4 border rounded space-y-3">
                 <div className="text-lg font-medium">Full Rewrite (Locked)</div>
                 <p className="text-sm text-gray-600">
-                  Unlock to generate and view the full ATS-aligned rewritten
-                  resume.
+                  Unlock to generate and view the full ATS-aligned rewritten resume.
                 </p>
 
-                <button
-                  className="px-4 py-2 rounded border bg-black text-white w-fit"
-                  onClick={unlockWithLemon}
-                >
+                <button className="px-4 py-2 rounded border bg-black text-white w-fit" onClick={unlockWithLemon}>
                   Unlock Full Resume (₩1,000 / ~$2)
                 </button>
 
                 <p className="text-xs text-gray-500">
-                  After payment, you will be redirected back here and your inputs
-                  should be restored automatically.
+                  After payment, you will be redirected back here. Your inputs are saved automatically.
                 </p>
               </div>
             ) : (
               <div className="p-4 border rounded">
                 <div className="text-lg font-medium mb-2">Rewritten Resume</div>
-                <pre className="whitespace-pre-wrap text-sm">
-                  {result.rewrittenResume}
-                </pre>
+                <pre className="whitespace-pre-wrap text-sm">{result.rewrittenResume}</pre>
               </div>
             )}
           </div>
@@ -253,13 +253,10 @@ export default function HomePage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold">About ResumeUp</h2>
         <p>
-          ResumeUp is an independent AI-driven resume optimization service
-          designed for global professionals applying to international roles.
+          ResumeUp is an independent AI-driven resume optimization service designed for global professionals applying to
+          international roles.
         </p>
-        <p>
-          We leverage advanced language models to help candidates improve keyword
-          alignment, clarity, and impact.
-        </p>
+        <p>We leverage advanced language models to help candidates improve keyword alignment, clarity, and impact.</p>
       </section>
 
       <footer className="pt-12 border-t text-sm text-gray-500 space-x-4">

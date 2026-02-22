@@ -9,17 +9,22 @@ import {
   rewriteUser,
   type RoleProfile,
 } from "@/lib/prompts";
+import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
     const resumeText = String(body?.resumeText ?? "");
     const jdText = String(body?.jdText ?? "");
-    const mode = (body?.mode === "full" ? "full" : "preview") as "preview" | "full";
+    const mode = (body?.mode === "full" ? "full" : "preview") as
+      | "preview"
+      | "full";
+    const sid = String(body?.sid ?? ""); // ✅ required for full
 
-    if (!resumeText || !jdText) {
+    if (resumeText.length < 200 || jdText.length < 200) {
       return NextResponse.json(
-        { error: "resumeText and jdText are required" },
+        { error: "resumeText and jdText must be at least 200 characters." },
         { status: 400 }
       );
     }
@@ -29,6 +34,34 @@ export async function POST(req: Request) {
         { error: "Server misconfigured: OPENAI_API_KEY missing" },
         { status: 500 }
       );
+    }
+
+    // ✅ FULL mode: require paid sid
+    if (mode === "full") {
+      if (!sid) {
+        return NextResponse.json(
+          { error: "Missing sid for full mode" },
+          { status: 403 }
+        );
+      }
+
+      const sb = supabaseServer();
+      const { data: session, error: sessErr } = await sb
+        .from("checkout_sessions")
+        .select("status")
+        .eq("id", sid)
+        .single();
+
+      if (sessErr || !session) {
+        return NextResponse.json({ error: "Invalid sid" }, { status: 403 });
+      }
+
+      if (session.status !== "paid" && session.status !== "fulfilled") {
+        return NextResponse.json(
+          { error: "Payment not confirmed" },
+          { status: 403 }
+        );
+      }
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -52,7 +85,9 @@ export async function POST(req: Request) {
 
     const countMatch = (arr: string[]) => {
       const total = arr.length || 1;
-      const matched = arr.filter((k) => resumeLower.includes(String(k).toLowerCase())).length;
+      const matched = arr.filter((k) =>
+        resumeLower.includes(String(k).toLowerCase())
+      ).length;
       return { matched, total, rate: matched / total };
     };
 
@@ -62,7 +97,10 @@ export async function POST(req: Request) {
     const rSoft = countMatch(list(extracted.soft_skills));
 
     const weighted =
-      (rSkills.rate * 2.0 + rTools.rate * 1.5 + rMetrics.rate * 2.0 + rSoft.rate * 1.0) /
+      (rSkills.rate * 2.0 +
+        rTools.rate * 1.5 +
+        rMetrics.rate * 2.0 +
+        rSoft.rate * 1.0) /
       (2.0 + 1.5 + 2.0 + 1.0);
 
     const atsScore = Math.round(weighted * 100);
@@ -93,9 +131,11 @@ export async function POST(req: Request) {
       response_format: { type: "json_object" } as any,
     });
 
-    const roleProfile = JSON.parse(roleResp.choices[0].message.content || "{}") as RoleProfile;
+    const roleProfile = JSON.parse(
+      roleResp.choices[0].message.content || "{}"
+    ) as RoleProfile;
 
-    // Preview mode: do NOT generate full rewrite (saves cost)
+    // Preview: no rewrite (save cost)
     if (mode === "preview") {
       return NextResponse.json({
         mode,
@@ -107,7 +147,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4) Full rewrite (costly)
+    // 4) Full rewrite
     const rewrite = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0.3,
@@ -118,6 +158,15 @@ export async function POST(req: Request) {
     });
 
     const rewrittenResume = rewrite.choices[0].message.content || "";
+
+    // ✅ mark fulfilled (optional) - requires sid exists and paid check already passed
+    if (sid) {
+      const sb = supabaseServer();
+      await sb
+        .from("checkout_sessions")
+        .update({ status: "fulfilled" })
+        .eq("id", sid);
+    }
 
     return NextResponse.json({
       mode,
