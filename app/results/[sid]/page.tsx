@@ -34,8 +34,8 @@ function Chip({
     tone === "missing"
       ? "bg-rose-50 border-rose-200 text-rose-800"
       : tone === "matched"
-      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-      : "bg-indigo-50 border-indigo-200 text-indigo-800";
+        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+        : "bg-indigo-50 border-indigo-200 text-indigo-800";
 
   return (
     <span className={`rounded-full border px-3 py-1 text-xs ${cls}`}>
@@ -191,9 +191,8 @@ export default async function ResultsPage({ params }: { params: { sid: string } 
               <div className="text-4xl font-semibold">
                 {clamp(overallAfter)}/100{" "}
                 <span
-                  className={`text-base font-semibold ${
-                    delta >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
+                  className={`text-base font-semibold ${delta >= 0 ? "text-emerald-700" : "text-rose-700"
+                    }`}
                 >
                   ({delta >= 0 ? "+" : ""}
                   {delta} pts)
@@ -265,13 +264,18 @@ export default async function ResultsPage({ params }: { params: { sid: string } 
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[
-              ["Required skills", reqMatched, reqMissing],
-              ["Tools", toolsMatched, toolsMissing],
-              ["Metrics keywords", metricsMatched, metricsMissing],
-              ["Soft skills", softMatched, softMissing],
-            ].map(([title, matched, missing]) => (
-              <div key={String(title)} className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-4">
+            {(
+              [
+                ["Required skills", reqMatched, reqMissing],
+                ["Tools", toolsMatched, toolsMissing],
+                ["Metrics keywords", metricsMatched, metricsMissing],
+                ["Soft skills", softMatched, softMissing],
+              ] as Array<[string, string[], string[]]>
+            ).map(([title, matched, missing]) => (
+              <div
+                key={title}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-4"
+              >
                 <div className="flex items-center justify-between">
                   <div className="font-semibold">{title}</div>
                   <div className="text-xs text-slate-500">
@@ -286,7 +290,9 @@ export default async function ResultsPage({ params }: { params: { sid: string } 
                       <Chip key={"x-" + k} text={k} tone="missing" />
                     ))}
                     {missing.length > 18 && (
-                      <span className="text-xs text-slate-500">+{missing.length - 18} more</span>
+                      <span className="text-xs text-slate-500">
+                        +{missing.length - 18} more
+                      </span>
                     )}
                   </div>
                 </div>
@@ -298,7 +304,9 @@ export default async function ResultsPage({ params }: { params: { sid: string } 
                       <Chip key={"m-" + k} text={k} tone="matched" />
                     ))}
                     {matched.length > 18 && (
-                      <span className="text-xs text-slate-500">+{matched.length - 18} more</span>
+                      <span className="text-xs text-slate-500">
+                        +{matched.length - 18} more
+                      </span>
                     )}
                   </div>
                 </div>
