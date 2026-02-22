@@ -328,52 +328,40 @@ export default function HomePage() {
         </div>
 
         {/* Bundle buttons (disabled until preview exists) */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-slate-900">Unlock full report</div>
-            <div className="text-xs text-slate-500">Choose a bundle (USD)</div>
+        <div className="mt-6 rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-6 text-white">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-sm text-white/70 font-semibold">Unlock full report</div>
+              <div className="text-xs text-white/60 mt-1">
+                Choose a bundle (USD) • Includes after-score + keyword report + rewritten resume
+              </div>
+            </div>
+            <div className="text-xs text-white/60">
+              {result ? "Ready to unlock" : "Run preview first"}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
             {[
-              {
-                id: "1320252",
-                label: "1 Report",
-                price: "$2",
-                note: "Try once",
-                popular: false,
-              },
-              {
-                id: "1332796",
-                label: "5 Reports",
-                price: "$8.99",
-                note: "Most popular",
-                popular: true,
-              },
-              {
-                id: "1332798",
-                label: "10 Reports",
-                price: "$14.99",
-                note: "Best value",
-                popular: false,
-              },
+              { id: "1320252", label: "1 Report", price: "$1", note: "Try once", popular: false },
+              { id: "1332796", label: "5 Reports", price: "$4.5", note: "Most popular", popular: true },
+              { id: "1332798", label: "10 Reports", price: "$8", note: "Best value", popular: false },
             ].map((plan) => (
               <button
                 key={plan.id}
                 onClick={() => unlock(plan.id)}
                 disabled={!result}
                 className={[
-                  "relative rounded-2xl border p-5 text-left transition",
-                  "bg-white hover:shadow-md",
-                  "disabled:opacity-40 disabled:hover:shadow-none",
+                  "relative text-left rounded-2xl border p-5 transition",
+                  "disabled:opacity-40 disabled:cursor-not-allowed",
                   plan.popular
-                    ? "border-slate-900 ring-2 ring-slate-900/10"
-                    : "border-slate-200",
+                    ? "border-emerald-400/40 bg-white/10 ring-2 ring-emerald-400/20 shadow-[0_0_0_1px_rgba(52,211,153,0.25)]"
+                    : "border-white/10 bg-white/5 hover:bg-white/10",
                 ].join(" ")}
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-4">
-                    <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+                    <span className="inline-flex items-center rounded-full bg-emerald-400 px-3 py-1 text-xs font-semibold text-slate-950">
                       Most popular
                     </span>
                   </div>
@@ -381,31 +369,31 @@ export default function HomePage() {
 
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-lg font-semibold text-slate-900">{plan.label}</div>
-                    <div className="text-sm text-slate-600">{plan.note}</div>
+                    <div className="text-lg font-semibold">{plan.label}</div>
+                    <div className="text-sm text-white/70">{plan.note}</div>
                   </div>
+
                   <div className="text-right">
-                    <div className="text-2xl font-semibold text-slate-900">{plan.price}</div>
-                    <div className="text-xs text-slate-500">one-time</div>
+                    <div className="text-3xl font-semibold">{plan.price}</div>
+                    <div className="text-xs text-white/60">one-time</div>
                   </div>
                 </div>
 
                 <div className="mt-4">
                   <div
                     className={[
-                      "w-full rounded-xl px-4 py-3 text-sm font-semibold",
+                      "w-full rounded-xl px-4 py-3 text-sm font-semibold text-center",
                       plan.popular
-                        ? "bg-slate-900 text-white hover:bg-slate-800"
-                        : "bg-slate-100 text-slate-900 hover:bg-slate-200",
-                      !result ? "pointer-events-none" : "",
+                        ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+                        : "bg-white/10 text-white hover:bg-white/15",
                     ].join(" ")}
                   >
                     {result ? "Unlock & Generate Now" : "Run preview first"}
                   </div>
                 </div>
 
-                <div className="mt-3 text-xs text-slate-500">
-                  Includes after-score + keyword report + rewritten resume.
+                <div className="mt-3 text-xs text-white/60">
+                  After payment → results page (saved link)
                 </div>
               </button>
             ))}
@@ -489,9 +477,9 @@ export default function HomePage() {
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
-              { label: "1 Report", price: "$2", note: "Try once" },
-              { label: "5 Reports", price: "$8.99", note: "Most popular" },
-              { label: "10 Reports", price: "$14.99", note: "Best value" },
+              { label: "1 Report", price: "$1", note: "Try once" },
+              { label: "5 Reports", price: "$4.5", note: "Most popular" },
+              { label: "10 Reports", price: "$8", note: "Best value" },
             ].map((p) => (
               <div key={p.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
                 <div className="text-lg font-semibold">{p.label}</div>
