@@ -13,18 +13,18 @@ function ScoreRing({ value, label }: { value: number; label: string }) {
       <div
         className="h-16 w-16 rounded-full"
         style={{
-          background: `conic-gradient(#22c55e ${v * 3.6}deg, rgba(255,255,255,0.12) 0deg)`,
+          background: `conic-gradient(#22c55e ${v * 3.6}deg, #e5e7eb 0deg)`,
         }}
       >
         <div className="h-full w-full p-2">
-          <div className="h-full w-full rounded-full bg-black flex items-center justify-center">
-            <div className="text-sm font-semibold">{v}</div>
+          <div className="h-full w-full rounded-full bg-white flex items-center justify-center shadow-sm">
+            <div className="text-sm font-semibold text-gray-900">{v}</div>
           </div>
         </div>
       </div>
       <div>
-        <div className="text-sm text-gray-400">{label}</div>
-        <div className="text-lg font-semibold">{v}/100</div>
+        <div className="text-sm text-gray-600">{label}</div>
+        <div className="text-lg font-semibold text-gray-900">{v}/100</div>
       </div>
     </div>
   );
@@ -43,19 +43,72 @@ function BarCompare({
   const a = Math.max(0, Math.min(100, after));
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm text-gray-400">
+      <div className="flex items-center justify-between text-sm text-gray-600">
         <span>{label}</span>
         <span>
-          {b} → <span className="text-white font-semibold">{a}</span>
+          {b} → <span className="text-gray-900 font-semibold">{a}</span>
         </span>
       </div>
-      <div className="h-2 w-full rounded bg-white/10 overflow-hidden">
-        <div className="h-2 bg-white/25" style={{ width: `${b}%` }} />
+      <div className="h-2 w-full rounded bg-gray-200 overflow-hidden">
+        <div className="h-2 bg-gray-400" style={{ width: `${b}%` }} />
       </div>
-      <div className="h-2 w-full rounded bg-white/10 overflow-hidden">
+      <div className="h-2 w-full rounded bg-gray-200 overflow-hidden">
         <div className="h-2 bg-emerald-500" style={{ width: `${a}%` }} />
       </div>
       <div className="text-xs text-gray-500">Top: before / Bottom: after</div>
+    </div>
+  );
+}
+
+function KeywordTags({
+  data,
+  mode,
+}: {
+  data: Record<string, string[]> | null | undefined;
+  mode: "gaps" | "improvements";
+}) {
+  if (!data) return <span className="text-sm text-gray-500">No data</span>;
+  const labels: Record<string, string> =
+    mode === "gaps"
+      ? {
+          required_skills: "Required Skills",
+          tools: "Tools",
+          metrics_keywords: "Metrics",
+          soft_skills: "Soft Skills",
+        }
+      : {
+          required_skills_added: "Skills Added",
+          tools_added: "Tools Added",
+          metrics_added: "Metrics Added",
+          soft_skills_added: "Soft Skills Added",
+        };
+  const keys = Object.keys(labels) as (keyof typeof labels)[];
+  const sections = keys
+    .map((key) => {
+      const items = Array.isArray(data[key]) ? (data[key] as string[]) : [];
+      return { key, items, label: labels[key] };
+    })
+    .filter((s) => s.items.length > 0);
+
+  if (sections.length === 0) return <span className="text-sm text-gray-500">None</span>;
+
+  return (
+    <div className="space-y-3">
+      {sections.map(({ key, items, label }) => (
+        <div key={key}>
+          <div className="text-xs font-medium text-gray-600 mb-1.5">{label}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {items.map((item, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"
+              >
+                {String(item)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -253,15 +306,15 @@ export default function HomePage() {
         {result && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50">
                 <ScoreRing value={result.atsScore} label="ATS Score (Before)" />
               </div>
 
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5 md:col-span-2">
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50 md:col-span-2">
                 {result.mode === "full" ? (
                   <ScoreRing value={result.atsAfter} label="ATS Score (After)" />
                 ) : (
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm text-gray-600">
                     Unlock to generate the full rewrite and after-score report.
                   </div>
                 )}
@@ -269,7 +322,7 @@ export default function HomePage() {
             </div>
 
             {result.mode === "full" && (
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50">
                 <BarCompare
                   before={result.atsScore}
                   after={result.atsAfter}
@@ -279,45 +332,41 @@ export default function HomePage() {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
-                <div className="text-sm text-gray-400 mb-2">Keyword Gaps</div>
-                <pre className="whitespace-pre-wrap text-xs text-gray-200">
-                  {JSON.stringify(result.gaps, null, 2)}
-                </pre>
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50">
+                <div className="text-sm font-medium text-gray-700 mb-3">Keyword Gaps</div>
+                <KeywordTags data={result.gaps} mode="gaps" />
               </div>
 
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
-                <div className="text-sm text-gray-400 mb-2">Improvements (Added)</div>
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50">
+                <div className="text-sm font-medium text-gray-700 mb-3">Improvements (Added)</div>
                 {result.mode !== "full" ? (
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-gray-600">
                     Unlock to see what changed and which keywords were added.
                   </div>
                 ) : (
-                  <pre className="whitespace-pre-wrap text-xs text-gray-200">
-                    {JSON.stringify(result.improvements, null, 2)}
-                  </pre>
+                  <KeywordTags data={result.improvements} mode="improvements" />
                 )}
               </div>
             </div>
 
             {result.mode === "preview" ? (
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5 space-y-3">
-                <div className="text-lg font-semibold">Full Rewrite (Locked)</div>
-                <p className="text-sm text-gray-400">
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50 space-y-3">
+                <div className="text-lg font-semibold text-gray-900">Full Rewrite (Locked)</div>
+                <p className="text-sm text-gray-600">
                   Unlock to generate and view the full ATS-aligned rewritten resume and improvement report.
                 </p>
 
                 <button
-                  className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-semibold w-fit"
+                  className="px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold w-fit hover:bg-emerald-600"
                   onClick={unlockWithLemon}
                 >
                   Unlock Full Report (₩1,000 / ~$2)
                 </button>
               </div>
             ) : (
-              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
-                <div className="text-lg font-semibold mb-2">Rewritten Resume</div>
-                <pre className="whitespace-pre-wrap text-sm text-gray-100">
+              <div className="p-5 rounded-xl border border-gray-200 bg-gray-50">
+                <div className="text-lg font-semibold text-gray-900 mb-2">Rewritten Resume</div>
+                <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-white p-4 rounded-lg border border-gray-200">
                   {result.rewrittenResume}
                 </pre>
               </div>
