@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const sb = supabaseServer();
     const { data: session, error } = await sb
       .from("checkout_sessions")
-      .select("status,resume_text,jd_text,ats_before,result_json")
+      .select("status,resume_text,jd_text,result_json")
       .eq("id", sid)
       .single();
 
@@ -17,14 +17,12 @@ export async function POST(req: Request) {
     if (session.status !== "paid" && session.status !== "fulfilled") {
       return NextResponse.json({ error: "Payment not confirmed" }, { status: 403 });
     }
-
-    // If already generated, do nothing (idempotent)
-    if (session.result_json && session.status === "fulfilled") {
+    if (session.status === "fulfilled" && session.result_json) {
       return NextResponse.json({ ok: true, reused: true });
     }
 
-    // Call analyze full (server-to-server)
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/analyze`, {
+    const base = process.env.NEXT_PUBLIC_BASE_URL!;
+    const res = await fetch(`${base}/api/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -37,10 +35,6 @@ export async function POST(req: Request) {
 
     const data = await res.json();
     if (!res.ok) return NextResponse.json({ error: data?.error || "Analyze failed" }, { status: 500 });
-
-    // analyze route should already save fulfilled + result_json.
-    // But to be safe, ensure status is fulfilled.
-    await sb.from("checkout_sessions").update({ status: "fulfilled" }).eq("id", sid);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
