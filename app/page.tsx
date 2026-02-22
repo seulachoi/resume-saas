@@ -69,6 +69,28 @@ export default function HomePage() {
     });
 
   };
+
+
+  const refreshCredits = async () => {
+    const supabase = supabaseBrowser();
+
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id ?? null;
+
+    if (!uid) {
+      setCredits(null);
+      return;
+    }
+
+    const { data: cRow } = await supabase
+      .from("user_credits")
+      .select("balance")
+      .eq("user_id", uid)
+      .single();
+
+    setCredits(Number(cRow?.balance ?? 0));
+  };
+
   const creditsByVariant: Record<string, number> = {
     "1320252": 1,
     "1332796": 5,
@@ -80,10 +102,28 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    refreshCredits();
+
+    const supabase = supabaseBrowser();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      refreshCredits();
+    });
+
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     // 1) Auto-open bundle modal when redirected with query params
     const params = new URLSearchParams(window.location.search);
     const openBundles = params.get("buy") === "1";
     const reason = params.get("reason");
+    if (params.get("buy") === "1" && reason === "insufficient") {
+      setShowBundleModal(true);
+      setModalReason("insufficient");
+      window.history.replaceState({}, "", window.location.pathname + "#analyzer");
+    }
 
     if (openBundles) {
       setShowBundleModal(true);
@@ -100,6 +140,7 @@ export default function HomePage() {
       // show toast if within 10 minutes
       if (credits > 0 && ts && Date.now() - ts < 10 * 60 * 1000) {
         setToast(`Credits +${credits} added`);
+        refreshCredits();
         localStorage.removeItem("resumeup_last_purchase_ts");
         localStorage.removeItem("resumeup_last_purchase_credits");
 
@@ -145,37 +186,7 @@ export default function HomePage() {
     } catch { }
   }, [resumeText, jdText]);
 
-  useEffect(() => {
-    const supabase = supabaseBrowser();
 
-    const load = async () => {
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user?.id ?? null;
-
-      if (!uid) {
-        setCredits(null);
-        return;
-      }
-
-      const { data: cRow } = await supabase
-        .from("user_credits")
-        .select("balance")
-        .eq("user_id", uid)
-        .single();
-
-      setCredits(Number(cRow?.balance ?? 0));
-    };
-
-    load();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      load();
-    });
-
-    return () => {
-      sub.subscription.unsubscribe();
-    };
-  }, []);
 
   const runPreview = async () => {
     setLoading(true);

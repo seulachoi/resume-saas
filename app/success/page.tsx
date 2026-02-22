@@ -39,11 +39,16 @@ export default function SuccessPage() {
     if (!res.ok) {
         const msg = String(data?.error || "Failed to generate report");
       
-        // If sign-in required or insufficient credits -> redirect home with modal open
-        if (res.status === 403) {
-          const reason =
-            msg.toLowerCase().includes("sign-in") ? "signin" : "insufficient";
-          window.location.href = `/?buy=1&reason=${reason}#analyzer`;
+        // ✅ Only show modal if truly insufficient credits
+        if (res.status === 403 && msg.toLowerCase().includes("insufficient")) {
+          window.location.href = "/?buy=1&reason=insufficient#analyzer";
+          return;
+        }
+      
+        // ✅ If sign-in required, show sign-in UI (do NOT open buy modal)
+        if (res.status === 403 && msg.toLowerCase().includes("sign-in")) {
+          setStatus("need_signin");
+          setMessage("Sign-in required to use credits.");
           return;
         }
       
