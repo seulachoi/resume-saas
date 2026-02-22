@@ -2,65 +2,51 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function POST(req: Request) {
-  // 1) Parse payload safely
   let payload: any = null;
+
   try {
     payload = await req.json();
   } catch {
-    // Always ACK to avoid Lemon "Pending"
     return NextResponse.json({ ok: true, note: "invalid_json_acked" });
   }
 
-  // 2) Identify event
   const eventName =
-    payload?.meta?.event_name ||
-    payload?.meta?.event ||
-    payload?.event_name ||
-    payload?.name;
+    payload?.meta?.event_name || payload?.meta?.event || payload?.event_name;
 
-  // We only act on order_created (for test mode)
   if (eventName !== "order_created") {
     return NextResponse.json({ ok: true, ignored: true, eventName });
   }
 
-  // 3) Extract order id
-  const orderId =
-    payload?.data?.id ||
-    payload?.data?.attributes?.order_number ||
-    payload?.data?.attributes?.identifier;
+  // ✅ Lemon order id
+  const orderId = payload?.data?.id ? String(payload.data.id) : null;
 
-  // 4) Extract sid (try multiple known locations)
-  const sid =
-    payload?.data?.attributes?.first_order_item?.custom?.sid ||
-    payload?.data?.attributes?.custom_data?.sid ||
-    payload?.data?.attributes?.checkout_data?.custom?.sid ||
-    payload?.data?.attributes?.checkout_data?.custom_data?.sid ||
-    payload?.data?.attributes?.metadata?.sid ||
-    payload?.meta?.custom_data?.sid;
+  // ✅ THIS IS THE REAL SID LOCATION (from your payload)
+  const sid = payload?.meta?.custom_data?.sid
+    ? String(payload.meta.custom_data.sid)
+    : "";
 
-  // If sid missing, ACK but mark for debugging
   if (!sid) {
-    return NextResponse.json({
-      ok: true,
-      note: "sid_missing_acked",
-      orderId: orderId ? String(orderId) : null,
-    });
+    return NextResponse.json({ ok: true, note: "sid_missing_acked", orderId });
   }
 
-  // 5) Update Supabase (best-effort)
   try {
     const sb = supabaseServer();
-    await sb
+
+    const { error } = await sb
       .from("checkout_sessions")
       .update({
         status: "paid",
-        lemon_order_id: orderId ? String(orderId) : null,
+        lemon_order_id: orderId,
       })
-      .eq("id", String(sid));
+      .eq("id", sid);
+
+    if (error) {
+      // still ACK to Lemon so it doesn't keep retrying
+      return NextResponse.json({ ok: true, note: "db_update_failed_acked" });
+    }
   } catch {
-    // ignore errors but still ACK
+    return NextResponse.json({ ok: true, note: "exception_acked" });
   }
 
-  // 6) Always ACK
   return NextResponse.json({ ok: true });
 }
