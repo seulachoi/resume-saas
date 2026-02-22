@@ -34,8 +34,8 @@ function Chip({
     tone === "missing"
       ? "bg-rose-50 border-rose-200 text-rose-800"
       : tone === "matched"
-        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-        : "bg-indigo-50 border-indigo-200 text-indigo-800";
+      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+      : "bg-indigo-50 border-indigo-200 text-indigo-800";
 
   return (
     <span className={`rounded-full border px-3 py-1 text-xs ${cls}`}>
@@ -81,47 +81,67 @@ function computeMatched(all: string[], missing: string[]) {
   return all.filter((k) => !missSet.has(k.toLowerCase()));
 }
 
-export default async function ResultsPage({ params }: { params: { sid: string } }) {
+export default async function ResultsPage({
+  params,
+}: {
+  params: { sid?: string } | Promise<{ sid?: string }>;
+}) {
+  // ✅ Robust param handling (prevents "undefined" uuid errors)
+  const p: any = await params;
+  const sid = typeof p?.sid === "string" ? p.sid : "";
+
+  if (!sid) {
+    return (
+      <main className="min-h-screen bg-white p-10">
+        <div className="mx-auto max-w-3xl">
+          <h1 className="text-2xl font-semibold text-slate-900">Result not found</h1>
+          <p className="mt-2 text-slate-600">Missing sid in route params.</p>
+        </div>
+      </main>
+    );
+  }
+
   const sb = supabaseServer();
   const { data: session, error } = await sb
-  .from("checkout_sessions")
-  .select("status, result_json, ats_before, ats_after, created_at")
-  .eq("id", params.sid)
-  .single();
+    .from("checkout_sessions")
+    .select("status, result_json, ats_before, ats_after, created_at")
+    .eq("id", sid)
+    .single();
 
-if (error) {
-  return (
-    <main className="min-h-screen bg-white p-10">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-2xl font-semibold text-slate-900">Results load failed</h1>
-        <p className="mt-2 text-slate-600">{error.message}</p>
-        <p className="mt-2 text-xs text-slate-500 font-mono">sid: {params.sid}</p>
-      </div>
-    </main>
-  );
-}
+  if (error) {
+    return (
+      <main className="min-h-screen bg-white p-10">
+        <div className="mx-auto max-w-3xl">
+          <h1 className="text-2xl font-semibold text-slate-900">Results load failed</h1>
+          <p className="mt-2 text-slate-600">{error.message}</p>
+          <p className="mt-2 text-xs text-slate-500 font-mono">sid: {sid}</p>
+        </div>
+      </main>
+    );
+  }
 
-if (!session) {
-  return (
-    <main className="min-h-screen bg-white p-10">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-2xl font-semibold text-slate-900">Result not found</h1>
-        <p className="mt-2 text-slate-600">No session row returned.</p>
-        <p className="mt-2 text-xs text-slate-500 font-mono">sid: {params.sid}</p>
-      </div>
-    </main>
-  );
-}
+  if (!session) {
+    return (
+      <main className="min-h-screen bg-white p-10">
+        <div className="mx-auto max-w-3xl">
+          <h1 className="text-2xl font-semibold text-slate-900">Result not found</h1>
+          <p className="mt-2 text-slate-600">Invalid link or expired session.</p>
+          <p className="mt-2 text-xs text-slate-500 font-mono">sid: {sid}</p>
+        </div>
+      </main>
+    );
+  }
 
   if (session.status !== "fulfilled" || !session.result_json) {
     return (
       <main className="min-h-screen bg-white p-10">
         <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-6">
           <h1 className="text-xl font-semibold text-slate-900">Preparing your report…</h1>
-          <p className="mt-2 text-slate-600">Please refresh in a moment.</p>
+          <p className="mt-2 text-slate-600">Your payment is confirmed. Please refresh in a moment.</p>
           <div className="mt-4 h-2 w-full rounded bg-slate-100 overflow-hidden">
             <div className="h-2 w-1/2 bg-slate-900 animate-pulse" />
           </div>
+          <p className="mt-3 text-xs text-slate-500 font-mono">sid: {sid}</p>
         </div>
       </main>
     );
@@ -177,7 +197,7 @@ if (!session) {
   ].map((x: any) => String(x));
 
   const rewritten = String(r.rewrittenResume || "");
-  const downloadName = `resumeup-rewritten-${params.sid.slice(0, 8)}.txt`;
+  const downloadName = `resumeup-rewritten-${sid.slice(0, 8)}.txt`;
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -185,8 +205,10 @@ if (!session) {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-slate-900" />
-            <div className="font-semibold">ResumeUp</div>
+            <a href="/" className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-slate-900" />
+              <div className="font-semibold">ResumeUp</div>
+            </a>
           </div>
           <div className="flex items-center gap-2">
             <Pill>Report saved</Pill>
@@ -204,8 +226,9 @@ if (!session) {
               <div className="text-4xl font-semibold">
                 {clamp(overallAfter)}/100{" "}
                 <span
-                  className={`text-base font-semibold ${delta >= 0 ? "text-emerald-700" : "text-rose-700"
-                    }`}
+                  className={`text-base font-semibold ${
+                    delta >= 0 ? "text-emerald-700" : "text-rose-700"
+                  }`}
                 >
                   ({delta >= 0 ? "+" : ""}
                   {delta} pts)
@@ -215,7 +238,7 @@ if (!session) {
                 Before {clamp(overallBefore)} → After {clamp(overallAfter)}
               </div>
               <div className="mt-3 text-xs text-slate-500">
-                Session: <span className="font-mono">{params.sid}</span>
+                Session: <span className="font-mono">{sid}</span>
               </div>
             </div>
 
@@ -223,13 +246,15 @@ if (!session) {
               <Ring value={overallAfter} />
               <div className="space-y-3 min-w-[260px]">
                 <div className="text-xs text-slate-500">Before → After</div>
-                {[
-                  ["Overall", overallBefore, overallAfter],
-                  ["Skills", subsBefore.skills, subsAfter.skills],
-                  ["Impact", subsBefore.impact, subsAfter.impact],
-                  ["Brevity", subsBefore.brevity, subsAfter.brevity],
-                ].map(([label, b, a]) => (
-                  <div key={String(label)} className="space-y-1">
+                {(
+                  [
+                    ["Overall", overallBefore, overallAfter],
+                    ["Skills", subsBefore.skills, subsAfter.skills],
+                    ["Impact", subsBefore.impact, subsAfter.impact],
+                    ["Brevity", subsBefore.brevity, subsAfter.brevity],
+                  ] as Array<[string, number, number]>
+                ).map(([label, b, a]) => (
+                  <div key={label} className="space-y-1">
                     <div className="flex items-center justify-between text-xs text-slate-600">
                       <span>{label}</span>
                       <span>
@@ -250,19 +275,21 @@ if (!session) {
 
         {/* SUBSCORES */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            ["Skills", subsBefore.skills, subsAfter.skills, "Keyword alignment vs JD"],
-            ["Impact", subsBefore.impact, subsAfter.impact, "Evidence of measurable outcomes"],
-            ["Brevity", subsBefore.brevity, subsAfter.brevity, "Conciseness & bullet readability"],
-          ].map(([name, b, a, desc]) => (
-            <div key={String(name)} className="rounded-2xl border border-slate-200 bg-white p-6">
+          {(
+            [
+              ["Skills", subsBefore.skills, subsAfter.skills, "Keyword alignment vs JD"],
+              ["Impact", subsBefore.impact, subsAfter.impact, "Evidence of measurable outcomes"],
+              ["Brevity", subsBefore.brevity, subsAfter.brevity, "Conciseness & bullet readability"],
+            ] as Array<[string, number, number, string]>
+          ).map(([name, b, a, desc]) => (
+            <div key={name} className="rounded-2xl border border-slate-200 bg-white p-6">
               <div className="text-sm text-slate-500">{name}</div>
               <div className="mt-2 text-2xl font-semibold">{clamp(Number(a))}/100</div>
               <div className="mt-1 text-sm text-slate-600">
                 Before {clamp(Number(b))} → After{" "}
                 <span className="font-semibold text-slate-900">{clamp(Number(a))}</span>
               </div>
-              <div className="mt-3 text-xs text-slate-500">{String(desc)}</div>
+              <div className="mt-3 text-xs text-slate-500">{desc}</div>
             </div>
           ))}
         </section>
@@ -285,10 +312,7 @@ if (!session) {
                 ["Soft skills", softMatched, softMissing],
               ] as Array<[string, string[], string[]]>
             ).map(([title, matched, missing]) => (
-              <div
-                key={title}
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-4"
-              >
+              <div key={title} className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold">{title}</div>
                   <div className="text-xs text-slate-500">
@@ -303,9 +327,7 @@ if (!session) {
                       <Chip key={"x-" + k} text={k} tone="missing" />
                     ))}
                     {missing.length > 18 && (
-                      <span className="text-xs text-slate-500">
-                        +{missing.length - 18} more
-                      </span>
+                      <span className="text-xs text-slate-500">+{missing.length - 18} more</span>
                     )}
                   </div>
                 </div>
@@ -317,9 +339,7 @@ if (!session) {
                       <Chip key={"m-" + k} text={k} tone="matched" />
                     ))}
                     {matched.length > 18 && (
-                      <span className="text-xs text-slate-500">
-                        +{matched.length - 18} more
-                      </span>
+                      <span className="text-xs text-slate-500">+{matched.length - 18} more</span>
                     )}
                   </div>
                 </div>
@@ -369,7 +389,6 @@ if (!session) {
               <div className="mt-1 text-slate-600">Copy/paste into your resume template.</div>
             </div>
 
-            {/* ✅ client-side actions */}
             <ClientActions textToCopy={rewritten} filename={downloadName} />
           </div>
 
