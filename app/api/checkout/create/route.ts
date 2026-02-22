@@ -72,7 +72,11 @@ export async function POST(req: Request) {
         data: {
           type: "checkouts",
           attributes: {
-            redirect_url: redirectUrl,
+            // Lemon checkout redirect after successful payment
+            product_options: {
+              redirect_url: redirectUrl,
+            },
+            // pass sid for webhook mapping later
             checkout_data: {
               custom: { sid },
             },
