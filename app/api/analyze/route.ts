@@ -159,21 +159,71 @@ export async function POST(req: Request) {
 
     const rewrittenResume = rewrite.choices[0].message.content || "";
 
-    // ✅ mark fulfilled (optional) - requires sid exists and paid check already passed
+    // --- compute ATS after using the same extracted keyword lists ---
+    const rewrittenLower = rewrittenResume.toLowerCase();
+
+    const countMatchText = (textLower: string, arr: string[]) => {
+      const total = arr.length || 1;
+      const matched = arr.filter((k) => textLower.includes(String(k).toLowerCase())).length;
+      return { matched, total, rate: matched / total };
+    };
+
+    const aSkills = countMatchText(rewrittenLower, list(extracted.required_skills));
+    const aTools = countMatchText(rewrittenLower, list(extracted.tools));
+    const aMetrics = countMatchText(rewrittenLower, list(extracted.metrics_keywords));
+    const aSoft = countMatchText(rewrittenLower, list(extracted.soft_skills));
+
+    const weightedAfter =
+      (aSkills.rate * 2.0 + aTools.rate * 1.5 + aMetrics.rate * 2.0 + aSoft.rate * 1.0) /
+      (2.0 + 1.5 + 2.0 + 1.0);
+
+    const atsAfter = Math.round(weightedAfter * 100);
+
+    // --- improvements: which gap keywords are now included in the rewritten resume ---
+    const improvements = {
+      required_skills_added: gaps.required_skills.filter((k: string) =>
+        rewrittenLower.includes(String(k).toLowerCase())
+      ),
+      tools_added: gaps.tools.filter((k: string) =>
+        rewrittenLower.includes(String(k).toLowerCase())
+      ),
+      metrics_added: gaps.metrics_keywords.filter((k: string) =>
+        rewrittenLower.includes(String(k).toLowerCase())
+      ),
+      soft_skills_added: gaps.soft_skills.filter((k: string) =>
+        rewrittenLower.includes(String(k).toLowerCase())
+      ),
+    };
+
+    // --- persist to Supabase (sid must be present in full mode) ---
     if (sid) {
-      const sb = supabaseServer();
-      await sb
+      const sb2 = supabaseServer();
+      await sb2
         .from("checkout_sessions")
-        .update({ status: "fulfilled" })
+        .update({
+          status: "fulfilled",
+          ats_after: atsAfter,
+          result_json: {
+            ats_before: atsScore,     // this is "before" score computed from original resume
+            ats_after: atsAfter,
+            roleProfile,
+            extractedKeywords: extracted,
+            gaps,
+            improvements,
+            rewrittenResume,
+          },
+        })
         .eq("id", sid);
     }
 
     return NextResponse.json({
       mode,
-      atsScore,
+      atsScore,      // before
+      atsAfter,      // after
       roleProfile,
       extractedKeywords: extracted,
       gaps,
+      improvements,
       rewrittenResume,
     });
   } catch (error: any) {

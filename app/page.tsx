@@ -6,6 +6,60 @@ const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_SID_KEY = "resumeup_sid";
 
+function ScoreRing({ value, label }: { value: number; label: string }) {
+  const v = Math.max(0, Math.min(100, value));
+  return (
+    <div className="flex items-center gap-4">
+      <div
+        className="h-16 w-16 rounded-full"
+        style={{
+          background: `conic-gradient(#22c55e ${v * 3.6}deg, rgba(255,255,255,0.12) 0deg)`,
+        }}
+      >
+        <div className="h-full w-full p-2">
+          <div className="h-full w-full rounded-full bg-black flex items-center justify-center">
+            <div className="text-sm font-semibold">{v}</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="text-sm text-gray-400">{label}</div>
+        <div className="text-lg font-semibold">{v}/100</div>
+      </div>
+    </div>
+  );
+}
+
+function BarCompare({
+  before,
+  after,
+  label,
+}: {
+  before: number;
+  after: number;
+  label: string;
+}) {
+  const b = Math.max(0, Math.min(100, before));
+  const a = Math.max(0, Math.min(100, after));
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-sm text-gray-400">
+        <span>{label}</span>
+        <span>
+          {b} → <span className="text-white font-semibold">{a}</span>
+        </span>
+      </div>
+      <div className="h-2 w-full rounded bg-white/10 overflow-hidden">
+        <div className="h-2 bg-white/25" style={{ width: `${b}%` }} />
+      </div>
+      <div className="h-2 w-full rounded bg-white/10 overflow-hidden">
+        <div className="h-2 bg-emerald-500" style={{ width: `${a}%` }} />
+      </div>
+      <div className="text-xs text-gray-500">Top: before / Bottom: after</div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
@@ -198,36 +252,74 @@ export default function HomePage() {
 
         {result && (
           <div className="space-y-4">
-            <div className="p-4 border rounded">
-              <div className="text-lg font-medium">ATS Score</div>
-              <div className="text-3xl">{result.atsScore}</div>
-              <div className="text-sm text-gray-500">mode: {result.mode}</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+                <ScoreRing value={result.atsScore} label="ATS Score (Before)" />
+              </div>
+
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5 md:col-span-2">
+                {result.mode === "full" ? (
+                  <ScoreRing value={result.atsAfter} label="ATS Score (After)" />
+                ) : (
+                  <div className="text-sm text-gray-400">
+                    Unlock to generate the full rewrite and after-score report.
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="p-4 border rounded">
-              <div className="text-lg font-medium mb-2">Keyword Gaps</div>
-              <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(result.gaps, null, 2)}</pre>
+            {result.mode === "full" && (
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+                <BarCompare
+                  before={result.atsScore}
+                  after={result.atsAfter}
+                  label="Overall ATS improvement"
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+                <div className="text-sm text-gray-400 mb-2">Keyword Gaps</div>
+                <pre className="whitespace-pre-wrap text-xs text-gray-200">
+                  {JSON.stringify(result.gaps, null, 2)}
+                </pre>
+              </div>
+
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+                <div className="text-sm text-gray-400 mb-2">Improvements (Added)</div>
+                {result.mode !== "full" ? (
+                  <div className="text-sm text-gray-500">
+                    Unlock to see what changed and which keywords were added.
+                  </div>
+                ) : (
+                  <pre className="whitespace-pre-wrap text-xs text-gray-200">
+                    {JSON.stringify(result.improvements, null, 2)}
+                  </pre>
+                )}
+              </div>
             </div>
 
             {result.mode === "preview" ? (
-              <div className="p-4 border rounded space-y-3">
-                <div className="text-lg font-medium">Full Rewrite (Locked)</div>
-                <p className="text-sm text-gray-600">
-                  Unlock to generate and view the full ATS-aligned rewritten resume.
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5 space-y-3">
+                <div className="text-lg font-semibold">Full Rewrite (Locked)</div>
+                <p className="text-sm text-gray-400">
+                  Unlock to generate and view the full ATS-aligned rewritten resume and improvement report.
                 </p>
 
-                <button className="px-4 py-2 rounded border bg-black text-white w-fit" onClick={unlockWithLemon}>
-                  Unlock Full Resume (₩1,000 / ~$2)
+                <button
+                  className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-semibold w-fit"
+                  onClick={unlockWithLemon}
+                >
+                  Unlock Full Report (₩1,000 / ~$2)
                 </button>
-
-                <p className="text-xs text-gray-500">
-                  After payment, you will be redirected back here. Your inputs are saved automatically.
-                </p>
               </div>
             ) : (
-              <div className="p-4 border rounded">
-                <div className="text-lg font-medium mb-2">Rewritten Resume</div>
-                <pre className="whitespace-pre-wrap text-sm">{result.rewrittenResume}</pre>
+              <div className="p-5 rounded-xl border border-white/10 bg-white/5">
+                <div className="text-lg font-semibold mb-2">Rewritten Resume</div>
+                <pre className="whitespace-pre-wrap text-sm text-gray-100">
+                  {result.rewrittenResume}
+                </pre>
               </div>
             )}
           </div>
