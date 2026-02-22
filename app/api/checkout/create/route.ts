@@ -3,7 +3,18 @@ import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function POST(req: Request) {
   try {
-    const { resumeText, jdText, atsBefore, variantId } = await req.json();
+    const body = await req.json();
+    const resumeText = String(body?.resumeText ?? "");
+    const jdText = String(body?.jdText ?? "");
+    const atsBefore = Number(body?.atsBefore ?? 0);
+    const variantId = String(body?.variantId ?? "");
+
+    if (resumeText.length < 200 || jdText.length < 200) {
+      return NextResponse.json(
+        { error: "resumeText and jdText must be at least 200 characters." },
+        { status: 400 }
+      );
+    }
 
     if (!variantId) {
       return NextResponse.json({ error: "Missing variantId" }, { status: 400 });
@@ -14,12 +25,12 @@ export async function POST(req: Request) {
       "1332796": 5,
       "1332798": 10,
     };
-
-    const credits = creditsMap[String(variantId)] ?? 1;
+    const credits = creditsMap[variantId] ?? 1;
 
     const sb = supabaseServer();
 
-    const { data: insertData, error: insErr } = await sb
+    // insert and get sid (id default gen_random_uuid() should be set)
+    const { data: row, error: insErr } = await sb
       .from("checkout_sessions")
       .insert({
         status: "created",
@@ -28,63 +39,84 @@ export async function POST(req: Request) {
         ats_before: atsBefore,
         credits,
       })
-      .select()
+      .select("id")
       .single();
 
-    if (insErr) {
-      return NextResponse.json({ error: insErr.message }, { status: 500 });
+    if (insErr || !row?.id) {
+      return NextResponse.json(
+        { error: insErr?.message ?? "Failed to create checkout session" },
+        { status: 500 }
+      );
     }
 
-    const sid = insertData.id;
+    const sid = String(row.id);
+
+    const redirectUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/success?sid=${encodeURIComponent(
+      sid
+    )}`;
 
     const lemonRes = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
       method: "POST",
       headers: {
+        Accept: "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
         Authorization: `Bearer ${process.env.LEMON_API_KEY}`,
-        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         data: {
           type: "checkouts",
           attributes: {
+            product_options: {
+              redirect_url: redirectUrl,
+            },
             checkout_data: {
-              custom: {
-                sid,
-              },
+              custom: { sid },
             },
           },
           relationships: {
             store: {
-              data: {
-                type: "stores",
-                id: process.env.LEMON_STORE_ID,
-              },
+              data: { type: "stores", id: String(process.env.LEMON_STORE_ID) },
             },
             variant: {
-              data: {
-                type: "variants",
-                id: variantId,
-              },
+              data: { type: "variants", id: String(variantId) },
             },
           },
         },
       }),
     });
 
-    const lemonData = await lemonRes.json();
+    const lemonJson = await lemonRes.json();
 
     if (!lemonRes.ok) {
+      await sb.from("checkout_sessions").update({ status: "failed" }).eq("id", sid);
       return NextResponse.json(
-        { error: "Failed to create Lemon checkout", lemon_body: lemonData },
+        {
+          error: "Failed to create Lemon checkout",
+          lemon_status: lemonRes.status,
+          lemon_body: lemonJson,
+        },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      sid,
-      checkoutUrl: lemonData.data.attributes.url,
-    });
+    const checkoutUrl = lemonJson?.data?.attributes?.url;
+    const checkoutId = lemonJson?.data?.id;
+
+    if (!checkoutUrl) {
+      await sb.from("checkout_sessions").update({ status: "failed" }).eq("id", sid);
+      return NextResponse.json({ error: "Lemon checkout URL missing" }, { status: 500 });
+    }
+
+    await sb
+      .from("checkout_sessions")
+      .update({ lemon_checkout_id: String(checkoutId ?? "") })
+      .eq("id", sid);
+
+    return NextResponse.json({ sid, checkoutUrl });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json(
+      { error: e?.message ?? "Unknown error" },
+      { status: 500 }
+    );
   }
 }
