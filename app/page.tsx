@@ -6,14 +6,6 @@ const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_SID_KEY = "resumeup_sid";
 
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
-      {children}
-    </span>
-  );
-}
-
 function PrimaryButton({
   children,
   onClick,
@@ -77,7 +69,7 @@ function ScoreRing({ value }: { value: number }) {
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
-  const [result, setResult] = useState<any>(null); // preview result only
+  const [result, setResult] = useState<any>(null); // preview only
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,11 +100,7 @@ export default function HomePage() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resumeText,
-          jdText,
-          mode: "preview",
-        }),
+        body: JSON.stringify({ resumeText, jdText, mode: "preview" }),
       });
 
       const data = await res.json();
@@ -127,7 +115,6 @@ export default function HomePage() {
 
   const unlock = async () => {
     setError(null);
-
     if (!result) {
       setError("Run preview first.");
       return;
@@ -156,13 +143,15 @@ export default function HomePage() {
 
   const missingSummary = useMemo(() => {
     const gaps = result?.gaps || {};
-    const c =
+    return (
       (gaps.required_skills?.length || 0) +
       (gaps.tools?.length || 0) +
       (gaps.metrics_keywords?.length || 0) +
-      (gaps.soft_skills?.length || 0);
-    return c;
+      (gaps.soft_skills?.length || 0)
+    );
   }, [result]);
+
+  const previewOverall = Number(result?.overallBefore ?? result?.atsScore ?? 0);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -173,7 +162,7 @@ export default function HomePage() {
             <div className="h-8 w-8 rounded-lg bg-slate-900" />
             <div className="font-semibold">ResumeUp</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <a className="text-sm text-slate-600 hover:text-slate-900" href="#pricing">
               Pricing
             </a>
@@ -184,76 +173,147 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 pt-10 pb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-          <div className="space-y-5">
+      {/* HERO */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
+        <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
+
+        <div className="mx-auto max-w-6xl px-6 py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative">
+          {/* LEFT */}
+          <div className="space-y-6">
             <div className="flex flex-wrap gap-2">
-              <Badge>Secure checkout</Badge>
-              <Badge>English-first</Badge>
-              <Badge>No keyword stuffing</Badge>
-              <Badge>No invented metrics</Badge>
+              {["Secure checkout", "English-first output", "No keyword stuffing", "No invented metrics"].map((t) => (
+                <span
+                  key={t}
+                  className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80"
+                >
+                  {t}
+                </span>
+              ))}
             </div>
 
-            <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight">
-              Turn your resume into an <span className="text-slate-600">ATS-friendly</span> version — fast.
+            <h1 className="text-4xl md:text-5xl font-semibold leading-tight tracking-tight">
+              Improve your resume with a
+              <span className="text-emerald-400"> score-first report</span>
             </h1>
-            <p className="text-slate-600 text-lg">
-              Paste your resume + job description. Get a keyword gap report and an ATS-style score preview.
-              Unlock to generate the full rewrite and improvement report.
+
+            <p className="text-lg text-white/75 max-w-xl">
+              Paste your resume + job description. Get an ATS-style score preview and keyword gap report.
+              Unlock the full rewrite and after-score improvement report.
             </p>
 
-            <div className="flex items-center gap-3">
-              <PrimaryButton
-                onClick={() => document.getElementById("analyzer")?.scrollIntoView({ behavior: "smooth" })}
+            <div className="flex flex-wrap items-center gap-3">
+              <a
+                href="#analyzer"
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
               >
                 Improve My Resume
-              </PrimaryButton>
-              <SecondaryButton onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
-                See pricing
-              </SecondaryButton>
+              </a>
+              <a
+                href="#pricing"
+                className="inline-flex items-center justify-center rounded-xl border border-white/20 bg-transparent px-6 py-3 text-sm font-semibold text-white/90 hover:bg-white/10"
+              >
+                Pricing
+              </a>
             </div>
 
-            <div className="text-xs text-slate-500">
-              Tip: Best results when you include measurable metrics (%, $, time saved). If unknown, we’ll keep TODO placeholders.
+            <div className="text-xs text-white/60">
+              Tip: Add 2–3 measurable metrics (%, $, time saved). If unknown, we’ll keep TODO placeholders.
             </div>
           </div>
 
-          {/* Preview mock card */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-            <div className="text-sm text-slate-500">Sample report preview</div>
-            <div className="mt-4 flex items-center gap-4">
-              <ScoreRing value={78} />
-              <div>
-                <div className="text-xl font-semibold">Overall score</div>
-                <div className="text-sm text-slate-600">Skills • Impact • Brevity</div>
+          {/* RIGHT: sample report mock */}
+          <div className="relative">
+            <div className="rounded-3xl bg-white shadow-2xl p-6 md:p-8 text-slate-900 border border-black/5">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">Resume Report</div>
+                <div className="text-xs text-slate-500">Sample</div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-12 gap-4 items-start">
+                <div className="col-span-5">
+                  <div className="text-xs text-slate-500">Overall score</div>
+                  <div className="mt-2 flex items-center gap-4">
+                    <div className="relative h-24 w-24">
+                      <div className="absolute inset-0 rounded-full border-[10px] border-slate-200"></div>
+                      <div className="absolute inset-0 rounded-full border-[10px] border-emerald-500 border-t-transparent rotate-45"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-3xl font-semibold">78</div>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-slate-600">
+                        Skills <span className="font-semibold text-slate-900">80</span>
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        Impact <span className="font-semibold text-slate-900">85</span>
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        Brevity <span className="font-semibold text-slate-900">72</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-span-7">
+                  <div className="text-xs text-slate-500">Before → After</div>
+                  <div className="mt-3 space-y-3">
+                    {[
+                      ["Overall", 62, 78],
+                      ["Skills", 68, 80],
+                      ["Impact", 71, 85],
+                    ].map(([label, b, a]) => (
+                      <div key={String(label)} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-slate-600">
+                          <span>{label}</span>
+                          <span>
+                            {b} → <span className="font-semibold text-slate-900">{a}</span>
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
+                          <div className="h-2 bg-slate-300" style={{ width: `${b}%` }} />
+                        </div>
+                        <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
+                          <div className="h-2 bg-emerald-500" style={{ width: `${a}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="text-xs text-slate-500">Missing keywords</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {["Cross-functional", "SaaS", "Revenue tooling", "Experimentation", "Stakeholders"].map((k) => (
+                    <span
+                      key={k}
+                      className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800"
+                    >
+                      {k}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <div className="rounded-xl bg-white border border-slate-200 p-3">
-                <div className="text-xs text-slate-500">Skills</div>
-                <div className="text-lg font-semibold">82</div>
-              </div>
-              <div className="rounded-xl bg-white border border-slate-200 p-3">
-                <div className="text-xs text-slate-500">Impact</div>
-                <div className="text-lg font-semibold">74</div>
-              </div>
-              <div className="rounded-xl bg-white border border-slate-200 p-3">
-                <div className="text-xs text-slate-500">Brevity</div>
-                <div className="text-lg font-semibold">88</div>
+
+            <div className="absolute -bottom-6 left-6 rounded-2xl bg-white/90 backdrop-blur border border-black/5 shadow px-4 py-3 hidden md:block">
+              <div className="text-xs text-slate-500">Report includes</div>
+              <div className="text-sm font-semibold text-slate-900">
+                Keyword gaps • After-score • Full rewrite
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Analyzer */}
+      {/* ANALYZER */}
       <section id="analyzer" className="mx-auto max-w-6xl px-6 py-10 space-y-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">Analyzer</h2>
-            <p className="text-slate-600">Preview is free. Unlock generates the full rewrite + after-score report.</p>
-          </div>
+        <div>
+          <h2 className="text-2xl font-semibold">Analyzer</h2>
+          <p className="text-slate-600">
+            Preview is free. Unlock generates the full rewrite and a dedicated report page.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -296,27 +356,67 @@ export default function HomePage() {
           </div>
         )}
 
+        {/* PREVIEW RESULT CARD */}
         {result && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-6 flex-wrap">
               <div className="flex items-center gap-4">
-                <ScoreRing value={Number(result.overallBefore ?? result.atsScore ?? 0)} />
+                <div className="h-16 w-16 rounded-full bg-slate-900 text-white flex items-center justify-center">
+                  <div className="text-xl font-semibold">{previewOverall}</div>
+                </div>
                 <div>
-                  <div className="text-lg font-semibold">Preview score</div>
+                  <div className="text-sm text-slate-500">Preview score</div>
+                  <div className="text-xl font-semibold text-slate-900">
+                    Overall {previewOverall}/100
+                  </div>
                   <div className="text-sm text-slate-600">
                     Missing keywords: <span className="font-semibold">{missingSummary}</span>
                   </div>
                 </div>
               </div>
-              <div className="text-sm text-slate-600">
-                After payment, your full report will open on a dedicated results page.
+
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  ["Skills", result.subscoresBefore?.skills ?? 0],
+                  ["Impact", result.subscoresBefore?.impact ?? 0],
+                  ["Brevity", result.subscoresBefore?.brevity ?? 0],
+                ].map(([label, v]) => (
+                  <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                    <div className="text-xs text-slate-500">{label}</div>
+                    <div className="text-lg font-semibold text-slate-900">{Number(v)}</div>
+                  </div>
+                ))}
               </div>
+            </div>
+
+            <div className="mt-6">
+              <div className="text-sm font-semibold text-slate-900">Top missing keywords</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ...(result.gaps?.required_skills ?? []),
+                  ...(result.gaps?.tools ?? []),
+                  ...(result.gaps?.metrics_keywords ?? []),
+                ]
+                  .slice(0, 12)
+                  .map((k: string) => (
+                    <span
+                      key={k}
+                      className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800"
+                    >
+                      {k}
+                    </span>
+                  ))}
+              </div>
+            </div>
+
+            <div className="mt-6 text-xs text-slate-500">
+              After payment, you will be redirected to a dedicated report page: <code>/results/[sid]</code>
             </div>
           </div>
         )}
       </section>
 
-      {/* Pricing */}
+      {/* PRICING */}
       <section id="pricing" className="mx-auto max-w-6xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8">
           <h2 className="text-2xl font-semibold">Pricing</h2>
@@ -334,9 +434,7 @@ export default function HomePage() {
                 <li>Full rewritten resume (max 2 pages)</li>
               </ul>
               <div className="mt-6">
-                <PrimaryButton
-                  onClick={() => document.getElementById("analyzer")?.scrollIntoView({ behavior: "smooth" })}
-                >
+                <PrimaryButton onClick={() => document.getElementById("analyzer")?.scrollIntoView({ behavior: "smooth" })}>
                   Start with preview
                 </PrimaryButton>
               </div>
@@ -350,9 +448,7 @@ export default function HomePage() {
               </div>
               <div>
                 <div className="font-medium text-slate-800">Do you store my data?</div>
-                <div>
-                  We store the minimum needed to deliver your paid report. We do not sell your data.
-                </div>
+                <div>We store the minimum needed to deliver your paid report. We do not sell your data.</div>
               </div>
               <div>
                 <div className="font-medium text-slate-800">Refund policy</div>
