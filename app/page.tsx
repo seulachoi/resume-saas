@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
@@ -51,6 +52,15 @@ export default function HomePage() {
   const [result, setResult] = useState<any>(null); // preview result
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const signInWithGoogle = async () => {
+    const supabase = supabaseBrowser();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+  };
 
   // restore input
   useEffect(() => {
@@ -152,6 +162,12 @@ export default function HomePage() {
             <a className="text-sm text-slate-600 hover:text-slate-900" href="/terms">
               Terms
             </a>
+            <button
+              onClick={signInWithGoogle}
+              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+            >
+              Sign in
+            </button>
           </div>
         </div>
       </header>
