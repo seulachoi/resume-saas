@@ -27,27 +27,6 @@ function PrimaryButton({
   );
 }
 
-function SecondaryButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-}
-
 function ScoreRing({ value }: { value: number }) {
   const v = Math.max(0, Math.min(100, value || 0));
   return (
@@ -69,7 +48,7 @@ function ScoreRing({ value }: { value: number }) {
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
-  const [result, setResult] = useState<any>(null); // preview only
+  const [result, setResult] = useState<any>(null); // preview result
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +59,7 @@ export default function HomePage() {
       const j = localStorage.getItem(LS_JD_KEY) || "";
       if (r) setResumeText(r);
       if (j) setJdText(j);
-    } catch {}
+    } catch { }
   }, []);
 
   // persist input
@@ -88,7 +67,7 @@ export default function HomePage() {
     try {
       localStorage.setItem(LS_RESUME_KEY, resumeText);
       localStorage.setItem(LS_JD_KEY, jdText);
-    } catch {}
+    } catch { }
   }, [resumeText, jdText]);
 
   const runPreview = async () => {
@@ -113,8 +92,9 @@ export default function HomePage() {
     }
   };
 
-  const unlock = async () => {
+  const unlock = async (variantId: string) => {
     setError(null);
+
     if (!result) {
       setError("Run preview first.");
       return;
@@ -127,7 +107,8 @@ export default function HomePage() {
         body: JSON.stringify({
           resumeText,
           jdText,
-          atsBefore: result.atsScore ?? result.overallBefore ?? 0,
+          atsBefore: result.overallBefore ?? result.atsScore ?? 0,
+          variantId,
         }),
       });
 
@@ -151,7 +132,9 @@ export default function HomePage() {
     );
   }, [result]);
 
-  const previewOverall = Number(result?.overallBefore ?? result?.atsScore ?? 0);
+  const previewOverall = useMemo(() => {
+    return Number(result?.overallBefore ?? result?.atsScore ?? 0);
+  }, [result]);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -311,9 +294,7 @@ export default function HomePage() {
       <section id="analyzer" className="mx-auto max-w-6xl px-6 py-10 space-y-6">
         <div>
           <h2 className="text-2xl font-semibold">Analyzer</h2>
-          <p className="text-slate-600">
-            Preview is free. Unlock generates the full rewrite and a dedicated report page.
-          </p>
+          <p className="text-slate-600">Run preview first, then choose a bundle to unlock.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -343,11 +324,92 @@ export default function HomePage() {
             {loading ? "Analyzing..." : "Run preview"}
           </PrimaryButton>
 
-          <SecondaryButton onClick={unlock} disabled={!result}>
-            Unlock full report (₩1,000 / ~$2)
-          </SecondaryButton>
-
           <span className="text-xs text-slate-500">Minimum 200 characters each</span>
+        </div>
+
+        {/* Bundle buttons (disabled until preview exists) */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-slate-900">Unlock full report</div>
+            <div className="text-xs text-slate-500">Choose a bundle (USD)</div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+            {[
+              {
+                id: "1320252",
+                label: "1 Report",
+                price: "$2",
+                note: "Try once",
+                popular: false,
+              },
+              {
+                id: "1332796",
+                label: "5 Reports",
+                price: "$8.99",
+                note: "Most popular",
+                popular: true,
+              },
+              {
+                id: "1332798",
+                label: "10 Reports",
+                price: "$14.99",
+                note: "Best value",
+                popular: false,
+              },
+            ].map((plan) => (
+              <button
+                key={plan.id}
+                onClick={() => unlock(plan.id)}
+                disabled={!result}
+                className={[
+                  "relative rounded-2xl border p-5 text-left transition",
+                  "bg-white hover:shadow-md",
+                  "disabled:opacity-40 disabled:hover:shadow-none",
+                  plan.popular
+                    ? "border-slate-900 ring-2 ring-slate-900/10"
+                    : "border-slate-200",
+                ].join(" ")}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3 left-4">
+                    <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+                      Most popular
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold text-slate-900">{plan.label}</div>
+                    <div className="text-sm text-slate-600">{plan.note}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold text-slate-900">{plan.price}</div>
+                    <div className="text-xs text-slate-500">one-time</div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div
+                    className={[
+                      "w-full rounded-xl px-4 py-3 text-sm font-semibold",
+                      plan.popular
+                        ? "bg-slate-900 text-white hover:bg-slate-800"
+                        : "bg-slate-100 text-slate-900 hover:bg-slate-200",
+                      !result ? "pointer-events-none" : "",
+                    ].join(" ")}
+                  >
+                    {result ? "Unlock & Generate Now" : "Run preview first"}
+                  </div>
+                </div>
+
+                <div className="mt-3 text-xs text-slate-500">
+                  Includes after-score + keyword report + rewritten resume.
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {error && (
@@ -381,7 +443,10 @@ export default function HomePage() {
                   ["Impact", result.subscoresBefore?.impact ?? 0],
                   ["Brevity", result.subscoresBefore?.brevity ?? 0],
                 ].map(([label, v]) => (
-                  <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                  <div
+                    key={String(label)}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center"
+                  >
                     <div className="text-xs text-slate-500">{label}</div>
                     <div className="text-lg font-semibold text-slate-900">{Number(v)}</div>
                   </div>
@@ -420,41 +485,20 @@ export default function HomePage() {
       <section id="pricing" className="mx-auto max-w-6xl px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-8">
           <h2 className="text-2xl font-semibold">Pricing</h2>
-          <p className="mt-2 text-slate-600">Simple one-time payment.</p>
+          <p className="mt-2 text-slate-600">Bundles available in USD.</p>
 
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-              <div className="text-lg font-semibold">Full report</div>
-              <div className="mt-1 text-3xl font-semibold">₩1,000</div>
-              <div className="text-sm text-slate-600">(~$2) one-time</div>
-              <ul className="mt-4 space-y-2 text-sm text-slate-700 list-disc pl-5">
-                <li>Overall score + 3 sub-scores (Skills/Impact/Brevity)</li>
-                <li>Matched vs Missing keywords by category</li>
-                <li>After-score improvement report</li>
-                <li>Full rewritten resume (max 2 pages)</li>
-              </ul>
-              <div className="mt-6">
-                <PrimaryButton onClick={() => document.getElementById("analyzer")?.scrollIntoView({ behavior: "smooth" })}>
-                  Start with preview
-                </PrimaryButton>
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { label: "1 Report", price: "$2", note: "Try once" },
+              { label: "5 Reports", price: "$8.99", note: "Most popular" },
+              { label: "10 Reports", price: "$14.99", note: "Best value" },
+            ].map((p) => (
+              <div key={p.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                <div className="text-lg font-semibold">{p.label}</div>
+                <div className="mt-1 text-3xl font-semibold">{p.price}</div>
+                <div className="text-sm text-slate-600">{p.note}</div>
               </div>
-            </div>
-
-            <div className="text-sm text-slate-600 space-y-3">
-              <div className="font-semibold text-slate-900">FAQ</div>
-              <div>
-                <div className="font-medium text-slate-800">Does this guarantee interviews?</div>
-                <div>No. It improves clarity and keyword alignment, but outcomes depend on many factors.</div>
-              </div>
-              <div>
-                <div className="font-medium text-slate-800">Do you store my data?</div>
-                <div>We store the minimum needed to deliver your paid report. We do not sell your data.</div>
-              </div>
-              <div>
-                <div className="font-medium text-slate-800">Refund policy</div>
-                <div>Digital product. If you experience technical issues, contact support within 7 days.</div>
-              </div>
-            </div>
+            ))}
           </div>
 
           <div className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500 space-x-4">
