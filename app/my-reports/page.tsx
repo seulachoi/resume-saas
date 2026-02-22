@@ -15,6 +15,7 @@ export default function MyReportsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -26,10 +27,21 @@ export default function MyReportsPage() {
 
       if (!user?.id) {
         setRows([]);
+        setCredits(null);
         setLoading(false);
         return;
       }
 
+      // Load credits
+      const { data: cRow } = await supabase
+        .from("user_credits")
+        .select("balance")
+        .eq("user_id", user.id)
+        .single();
+
+      setCredits(Number(cRow?.balance ?? 0));
+
+      // Load reports
       const { data, error } = await supabase
         .from("checkout_sessions")
         .select("id,status,created_at,ats_before,ats_after")
@@ -62,6 +74,23 @@ export default function MyReportsPage() {
           </a>
         </div>
 
+        {/* Credits card */}
+        {credits !== null && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
+            <div className="text-sm text-white/70">Available credits</div>
+            <div className="mt-2 text-4xl font-semibold">{credits}</div>
+            <div className="mt-2 text-sm text-white/70">
+              Each full report uses <span className="font-semibold text-white">1 credit</span>.
+            </div>
+            <a
+              href="/#analyzer"
+              className="mt-4 inline-flex rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300"
+            >
+              Use a credit (new analysis)
+            </a>
+          </div>
+        )}
+
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
             Loading…
@@ -70,7 +99,7 @@ export default function MyReportsPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6">
             <div className="text-slate-900 font-semibold">Sign in required</div>
             <p className="mt-2 text-slate-600 text-sm">
-              Please sign in from the homepage to view your saved reports.
+              Please sign in from the homepage to view your saved reports and credits.
             </p>
             <a className="mt-4 inline-block underline text-slate-900" href="/">
               Go to homepage

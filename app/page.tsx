@@ -52,8 +52,12 @@ export default function HomePage() {
   const [jdText, setJdText] = useState("");
   const [result, setResult] = useState<any>(null); // preview result
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [showBundleModal, setShowBundleModal] = useState(false);
+  const [modalReason, setModalReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
     await supabase.auth.signInWithOAuth({
@@ -65,10 +69,46 @@ export default function HomePage() {
     });
 
   };
+  const creditsByVariant: Record<string, number> = {
+    "1320252": 1,
+    "1332796": 5,
+    "1332798": 10,
+  };
   const signOut = async () => {
     const supabase = supabaseBrowser();
     await supabase.auth.signOut();
   };
+
+  useEffect(() => {
+    // 1) Auto-open bundle modal when redirected with query params
+    const params = new URLSearchParams(window.location.search);
+    const openBundles = params.get("buy") === "1";
+    const reason = params.get("reason");
+
+    if (openBundles) {
+      setShowBundleModal(true);
+      setModalReason(reason || "insufficient");
+      // clean URL but keep hash if any
+      window.history.replaceState({}, "", window.location.pathname + "#analyzer");
+    }
+
+    // 2) Show "Credits +N added" toast once after purchase
+    try {
+      const ts = Number(localStorage.getItem("resumeup_last_purchase_ts") || "0");
+      const credits = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
+
+      // show toast if within 10 minutes
+      if (credits > 0 && ts && Date.now() - ts < 10 * 60 * 1000) {
+        setToast(`Credits +${credits} added`);
+        localStorage.removeItem("resumeup_last_purchase_ts");
+        localStorage.removeItem("resumeup_last_purchase_credits");
+
+        setTimeout(() => setToast(null), 2500);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     const supabase = supabaseBrowser();
@@ -104,6 +144,38 @@ export default function HomePage() {
       localStorage.setItem(LS_JD_KEY, jdText);
     } catch { }
   }, [resumeText, jdText]);
+
+  useEffect(() => {
+    const supabase = supabaseBrowser();
+
+    const load = async () => {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id ?? null;
+
+      if (!uid) {
+        setCredits(null);
+        return;
+      }
+
+      const { data: cRow } = await supabase
+        .from("user_credits")
+        .select("balance")
+        .eq("user_id", uid)
+        .single();
+
+      setCredits(Number(cRow?.balance ?? 0));
+    };
+
+    load();
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      load();
+    });
+
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   const runPreview = async () => {
     setLoading(true);
@@ -142,6 +214,13 @@ export default function HomePage() {
       setError("Run preview first.");
       return;
     }
+
+    // store purchase info for toast (shown after redirect)
+    localStorage.setItem(
+      "resumeup_last_purchase_credits",
+      String(creditsByVariant[variantId] ?? 1)
+    );
+    localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
 
     try {
       const supabase = supabaseBrowser();
@@ -206,6 +285,14 @@ export default function HomePage() {
                 >
                   My Reports
                 </a>
+                {credits !== null && (
+                  <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+                    Credits
+                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white/10 px-2 text-white">
+                      {credits}
+                    </span>
+                  </span>
+                )}
                 <button
                   onClick={signOut}
                   className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
@@ -566,6 +653,69 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-2xl bg-slate-900 text-white px-5 py-3 shadow-lg border border-white/10 text-sm font-semibold">
+            {toast}
+          </div>
+        </div>
+      )}
+
+      {/* Bundle Modal */}
+      {showBundleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowBundleModal(false)}
+          />
+          <div className="relative w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xl font-semibold text-slate-900">Get more credits</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {modalReason === "signin"
+                    ? "Please sign in to attach credits to your account."
+                    : "You don’t have enough credits to generate a new full report."}
+                </div>
+              </div>
+              <button
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                onClick={() => setShowBundleModal(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                { id: "1320252", label: "1 Report", price: "$1", note: "Try once" },
+                { id: "1332796", label: "5 Reports", price: "$4.5", note: "Most popular" },
+                { id: "1332798", label: "10 Reports", price: "$8", note: "Best value" },
+              ].map((plan) => (
+                <button
+                  key={plan.id}
+                  onClick={() => {
+                    setShowBundleModal(false);
+                    unlock(plan.id);
+                  }}
+                  className={`rounded-2xl border p-4 text-left hover:shadow-sm transition ${plan.id === "1332796" ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200"
+                    }`}
+                >
+                  <div className="text-sm font-semibold text-slate-900">{plan.label}</div>
+                  <div className="text-2xl font-semibold text-slate-900 mt-1">{plan.price}</div>
+                  <div className="text-xs text-slate-600 mt-1">{plan.note}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 text-xs text-slate-500">
+              Credits are tied to your account. Each full report uses 1 credit.
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
