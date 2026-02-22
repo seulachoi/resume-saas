@@ -52,6 +52,7 @@ export default function HomePage() {
   const [result, setResult] = useState<any>(null); // preview result
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
     await supabase.auth.signInWithOAuth({
@@ -59,9 +60,32 @@ export default function HomePage() {
       options: {
         redirectTo: `${window.location.origin}/`,
       },
+
     });
+
+  };
+  const signOut = async () => {
+    const supabase = supabaseBrowser();
+    await supabase.auth.signOut();
   };
 
+  useEffect(() => {
+    const supabase = supabaseBrowser();
+
+    // 1) 최초 세션 확인
+    supabase.auth.getSession().then(({ data }) => {
+      setUserEmail(data.session?.user?.email ?? null);
+    });
+
+    // 2) 로그인/로그아웃 변화 감지
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email ?? null);
+    });
+
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
   // restore input
   useEffect(() => {
     try {
@@ -162,12 +186,29 @@ export default function HomePage() {
             <a className="text-sm text-slate-600 hover:text-slate-900" href="/terms">
               Terms
             </a>
-            <button
-              onClick={signInWithGoogle}
-              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
-            >
-              Sign in
-            </button>
+            {userEmail ? (
+              <div className="flex items-center gap-2">
+                <a
+                  href="/my-reports"
+                  className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                >
+                  My Reports
+                </a>
+                <button
+                  onClick={signOut}
+                  className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={signInWithGoogle}
+                className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+              >
+                Sign in
+              </button>
+            )}
           </div>
         </div>
       </header>
