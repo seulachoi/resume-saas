@@ -5,37 +5,50 @@ import { useEffect, useState } from "react";
 const LS_SID_KEY = "resumeup_sid";
 
 export default function SuccessPage() {
-  const [sid, setSid] = useState<string>("");
+  const [msg, setMsg] = useState("Confirming payment & generating your report...");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const sidFromQuery = params.get("sid") || "";
+    const sid = params.get("sid") || "";
 
-    if (sidFromQuery) {
-      // ensure sid is stored (in case user opened success page directly)
-      localStorage.setItem(LS_SID_KEY, sidFromQuery);
-      setSid(sidFromQuery);
+    if (!sid) {
+      setMsg("Missing session id. Please return to the homepage.");
+      return;
     }
 
-    // Redirect back to home with unlocked flag
-    // Home page will auto-run FULL and include sid from localStorage
-    setTimeout(() => {
-      window.location.href = "/?unlocked=1#analyzer";
-    }, 700);
+    localStorage.setItem(LS_SID_KEY, sid);
+
+    (async () => {
+      try {
+        // Ask server to generate full report and persist it
+        const res = await fetch("/api/results/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sid }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to generate report");
+
+        window.location.href = `/results/${sid}`;
+      } catch (e: any) {
+        setMsg(e.message);
+      }
+    })();
   }, []);
 
   return (
-    <main className="max-w-xl mx-auto p-8 space-y-4">
-      <h1 className="text-2xl font-semibold">Payment received</h1>
-      <p className="text-gray-600">
-        Thanks! We’re preparing your full resume rewrite now.
-      </p>
-      <p className="text-sm text-gray-500">
-        Session: {sid ? sid : "loading..."}
-      </p>
-      <p className="text-sm text-gray-500">
-        Redirecting you back to results…
-      </p>
+    <main className="min-h-screen bg-white flex items-center justify-center p-8">
+      <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="text-xl font-semibold text-slate-900">ResumeUp</div>
+        <div className="mt-3 text-slate-600">{msg}</div>
+        <div className="mt-4 h-2 w-full rounded bg-slate-100 overflow-hidden">
+          <div className="h-2 w-1/2 bg-slate-900 animate-pulse" />
+        </div>
+        <div className="mt-4 text-xs text-slate-500">
+          This usually takes 30–90 seconds depending on resume length.
+        </div>
+      </div>
     </main>
   );
 }

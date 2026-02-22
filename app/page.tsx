@@ -1,107 +1,117 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ReportView, type ReportData } from "@/components/ReportView";
 
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_SID_KEY = "resumeup_sid";
 
-function asList(x: any): string[] {
-  return Array.isArray(x) ? x.map(String) : [];
-}
-
-function ShareResultLink() {
-  const [url, setUrl] = useState<string>("");
-  useEffect(() => {
-    try {
-      const sid = localStorage.getItem(LS_SID_KEY) || "";
-      setUrl(sid ? `${window.location.origin}/results/${sid}` : "");
-    } catch {
-      setUrl("");
-    }
-  }, []);
-  if (!url) return null;
+function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center justify-between gap-2 flex-wrap">
-      <span className="text-sm text-gray-400">
-        Save or share this link to revisit your result:
-      </span>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-emerald-400 hover:underline truncate max-w-xs"
-      >
-        {url}
-      </a>
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard.writeText(url);
-        }}
-        className="text-xs px-2 py-1 rounded border border-white/10 hover:bg-white/5"
-      >
-        Copy
-      </button>
-    </div>
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
+      {children}
+    </span>
   );
 }
 
-function computeMatched(extracted: string[], gaps: string[]): string[] {
-  const gapSet = new Set((gaps || []).map((s) => String(s).toLowerCase()));
-  return (extracted || []).filter((k) => !gapSet.has(String(k).toLowerCase()));
+function PrimaryButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900"
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ScoreRing({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(100, value || 0));
+  return (
+    <div
+      className="h-16 w-16 rounded-full"
+      style={{
+        background: `conic-gradient(#0f172a ${v * 3.6}deg, #e2e8f0 0deg)`,
+      }}
+    >
+      <div className="h-full w-full p-2">
+        <div className="h-full w-full rounded-full bg-white flex items-center justify-center">
+          <div className="text-sm font-semibold text-slate-900">{v}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<any>(null); // preview result only
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Restore inputs on first load
+  // restore input
   useEffect(() => {
     try {
       const r = localStorage.getItem(LS_RESUME_KEY) || "";
       const j = localStorage.getItem(LS_JD_KEY) || "";
       if (r) setResumeText(r);
       if (j) setJdText(j);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
-  // Persist inputs whenever they change
+  // persist input
   useEffect(() => {
     try {
       localStorage.setItem(LS_RESUME_KEY, resumeText);
       localStorage.setItem(LS_JD_KEY, jdText);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [resumeText, jdText]);
 
-  const callAnalyze = async (
-    mode: "preview" | "full",
-    override?: { r: string; j: string }
-  ) => {
+  const runPreview = async () => {
     setLoading(true);
     setError(null);
+    setResult(null);
 
     try {
-      const r = override?.r ?? resumeText;
-      const j = override?.j ?? jdText;
-      const sid = mode === "full" ? localStorage.getItem(LS_SID_KEY) : null;
-
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resumeText: r,
-          jdText: j,
-          mode,
-          sid,
+          resumeText,
+          jdText,
+          mode: "preview",
         }),
       });
 
@@ -115,15 +125,10 @@ export default function HomePage() {
     }
   };
 
-  const runPreview = async () => {
-    setResult(null);
-    await callAnalyze("preview");
-  };
-
-  const unlockWithLemon = async () => {
+  const unlock = async () => {
     setError(null);
 
-    if (!result || result.mode !== "preview") {
+    if (!result) {
       setError("Run preview first.");
       return;
     }
@@ -132,7 +137,11 @@ export default function HomePage() {
       const res = await fetch("/api/checkout/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText, jdText, atsBefore: result.atsScore }),
+        body: JSON.stringify({
+          resumeText,
+          jdText,
+          atsBefore: result.atsScore ?? result.overallBefore ?? 0,
+        }),
       });
 
       const data = await res.json();
@@ -145,217 +154,221 @@ export default function HomePage() {
     }
   };
 
-  // After returning from checkout (?unlocked=1), auto-run FULL
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const unlocked = params.get("unlocked");
-
-    if (unlocked === "1") {
-      setTimeout(async () => {
-        let r = "";
-        let j = "";
-
-        try {
-          r = localStorage.getItem(LS_RESUME_KEY) || "";
-          j = localStorage.getItem(LS_JD_KEY) || "";
-        } catch {
-          // ignore
-        }
-
-        if (r.length >= 200 && j.length >= 200) {
-          setResumeText(r);
-          setJdText(j);
-          await callAnalyze("full", { r, j });
-        } else {
-          setError(
-            "Payment success detected. Please paste your resume & job description again, then click Run Analyze (Preview)."
-          );
-        }
-
-        window.history.replaceState({}, "", window.location.pathname + "#analyzer");
-      }, 50);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const report = useMemo((): ReportData | null => {
-    if (!result) return null;
-
-    const extracted = result.extractedKeywords || {};
-    const gaps = result.gaps || {};
-
-    const requiredExtracted = asList(extracted.required_skills);
-    const toolsExtracted = asList(extracted.tools);
-    const metricsExtracted = asList(extracted.metrics_keywords);
-    const softExtracted = asList(extracted.soft_skills);
-
-    const requiredMissing = asList(gaps.required_skills);
-    const toolsMissing = asList(gaps.tools);
-    const metricsMissing = asList(gaps.metrics_keywords);
-    const softMissing = asList(gaps.soft_skills);
-
-    const subscoresBefore = result.subscoresBefore || {};
-    const subscoresAfter = result.subscoresAfter || {};
-    const overallBefore = Number(result.overallBefore ?? result.atsScore ?? 0);
-    const overallAfter = Number(result.overallAfter ?? result.atsAfter ?? result.atsScore ?? 0);
-
-    return {
-      overallBefore,
-      overallAfter,
-      subscoresBefore: {
-        skills: Number(subscoresBefore.skills ?? 0),
-        impact: Number(subscoresBefore.impact ?? 0),
-        brevity: Number(subscoresBefore.brevity ?? 0),
-      },
-      subscoresAfter: {
-        skills: Number(subscoresAfter.skills ?? 0),
-        impact: Number(subscoresAfter.impact ?? 0),
-        brevity: Number(subscoresAfter.brevity ?? 0),
-      },
-      required: { matched: computeMatched(requiredExtracted, requiredMissing), missing: requiredMissing },
-      tools: { matched: computeMatched(toolsExtracted, toolsMissing), missing: toolsMissing },
-      metrics: { matched: computeMatched(metricsExtracted, metricsMissing), missing: metricsMissing },
-      soft: { matched: computeMatched(softExtracted, softMissing), missing: softMissing },
-      improvements: result.improvements || null,
-      rewritten: String(result.rewrittenResume || ""),
-      mode: (result.mode === "full" ? "full" : "preview") as "preview" | "full",
-    };
+  const missingSummary = useMemo(() => {
+    const gaps = result?.gaps || {};
+    const c =
+      (gaps.required_skills?.length || 0) +
+      (gaps.tools?.length || 0) +
+      (gaps.metrics_keywords?.length || 0) +
+      (gaps.soft_skills?.length || 0);
+    return c;
   }, [result]);
 
   return (
-    <main className="max-w-5xl mx-auto p-8 space-y-12">
-      {/* HERO */}
-      <section className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-8 md:p-10 space-y-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-4xl md:text-5xl font-bold text-white">ResumeUp</h1>
-            <p className="mt-2 text-gray-300 text-lg">
-              ATS keyword alignment + AI rewrite for global job seekers.
-            </p>
+    <main className="min-h-screen bg-white text-slate-900">
+      {/* Top bar */}
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-slate-900" />
+            <div className="font-semibold">ResumeUp</div>
           </div>
-          <div className="hidden md:flex items-center gap-2">
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-200">
-              Secure checkout
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-200">
-              English-first
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-200">
-              No keyword stuffing
-            </span>
+          <div className="flex items-center gap-2">
+            <a className="text-sm text-slate-600 hover:text-slate-900" href="#pricing">
+              Pricing
+            </a>
+            <a className="text-sm text-slate-600 hover:text-slate-900" href="/terms">
+              Terms
+            </a>
           </div>
         </div>
+      </header>
 
-        <p className="text-gray-300 max-w-3xl">
-          Paste your resume + job description. Get an immediate keyword report and an ATS score preview.
-          Unlock to generate a full rewritten resume (max 2 pages) and an after-score improvement report.
-        </p>
+      {/* Hero */}
+      <section className="mx-auto max-w-6xl px-6 pt-10 pb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2">
+              <Badge>Secure checkout</Badge>
+              <Badge>English-first</Badge>
+              <Badge>No keyword stuffing</Badge>
+              <Badge>No invented metrics</Badge>
+            </div>
 
-        <a
-          href="#analyzer"
-          className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-black w-fit"
-        >
-          Analyze my resume
-        </a>
+            <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight">
+              Turn your resume into an <span className="text-slate-600">ATS-friendly</span> version — fast.
+            </h1>
+            <p className="text-slate-600 text-lg">
+              Paste your resume + job description. Get a keyword gap report and an ATS-style score preview.
+              Unlock to generate the full rewrite and improvement report.
+            </p>
+
+            <div className="flex items-center gap-3">
+              <PrimaryButton
+                onClick={() => document.getElementById("analyzer")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                Improve My Resume
+              </PrimaryButton>
+              <SecondaryButton onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
+                See pricing
+              </SecondaryButton>
+            </div>
+
+            <div className="text-xs text-slate-500">
+              Tip: Best results when you include measurable metrics (%, $, time saved). If unknown, we’ll keep TODO placeholders.
+            </div>
+          </div>
+
+          {/* Preview mock card */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+            <div className="text-sm text-slate-500">Sample report preview</div>
+            <div className="mt-4 flex items-center gap-4">
+              <ScoreRing value={78} />
+              <div>
+                <div className="text-xl font-semibold">Overall score</div>
+                <div className="text-sm text-slate-600">Skills • Impact • Brevity</div>
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-white border border-slate-200 p-3">
+                <div className="text-xs text-slate-500">Skills</div>
+                <div className="text-lg font-semibold">82</div>
+              </div>
+              <div className="rounded-xl bg-white border border-slate-200 p-3">
+                <div className="text-xs text-slate-500">Impact</div>
+                <div className="text-lg font-semibold">74</div>
+              </div>
+              <div className="rounded-xl bg-white border border-slate-200 p-3">
+                <div className="text-xs text-slate-500">Brevity</div>
+                <div className="text-lg font-semibold">88</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* ANALYZER */}
-      <section id="analyzer" className="space-y-6">
-        <div className="flex items-end justify-between gap-4">
+      {/* Analyzer */}
+      <section id="analyzer" className="mx-auto max-w-6xl px-6 py-10 space-y-6">
+        <div className="flex items-end justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-white">Resume Analyzer</h2>
-            <p className="text-sm text-gray-400">
-              Preview: score + keyword report. Full: rewrite + after-score + improvements.
-            </p>
+            <h2 className="text-2xl font-semibold">Analyzer</h2>
+            <p className="text-slate-600">Preview is free. Unlock generates the full rewrite + after-score report.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-            <label className="text-sm text-gray-300">Resume Text</label>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+            <div className="text-sm font-medium text-slate-700">Resume</div>
             <textarea
-              className="w-full h-64 rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-gray-100 outline-none"
+              className="w-full h-64 rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
               value={resumeText}
               onChange={(e) => setResumeText(e.target.value)}
-              placeholder="Paste resume text here..."
+              placeholder="Paste resume text..."
             />
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-            <label className="text-sm text-gray-300">Job Description Text</label>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+            <div className="text-sm font-medium text-slate-700">Job description</div>
             <textarea
-              className="w-full h-64 rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-gray-100 outline-none"
+              className="w-full h-64 rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
               value={jdText}
               onChange={(e) => setJdText(e.target.value)}
-              placeholder="Paste job description here..."
+              placeholder="Paste job description..."
             />
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={runPreview}
-            disabled={loading || resumeText.length < 200 || jdText.length < 200}
-            className="px-5 py-3 rounded-xl border border-white/10 bg-white/5 text-white font-semibold disabled:opacity-40"
-          >
-            {loading ? "Running..." : "Run Analyze (Preview)"}
-          </button>
+          <PrimaryButton onClick={runPreview} disabled={loading || resumeText.length < 200 || jdText.length < 200}>
+            {loading ? "Analyzing..." : "Run preview"}
+          </PrimaryButton>
 
-          <span className="text-xs text-gray-500">
-            Minimum 200 characters each.
-          </span>
+          <SecondaryButton onClick={unlock} disabled={!result}>
+            Unlock full report (₩1,000 / ~$2)
+          </SecondaryButton>
+
+          <span className="text-xs text-slate-500">Minimum 200 characters each</span>
         </div>
 
         {error && (
-          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-rose-200">
-            Error: {error}
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
+            {error}
           </div>
         )}
 
-        {/* REPORT */}
-        {report && (
-          <div className="space-y-6">
-            <ReportView report={report} onUnlock={unlockWithLemon} />
-            {report.mode === "full" && (
-              <ShareResultLink />
-            )}
+        {result && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-4">
+                <ScoreRing value={Number(result.overallBefore ?? result.atsScore ?? 0)} />
+                <div>
+                  <div className="text-lg font-semibold">Preview score</div>
+                  <div className="text-sm text-slate-600">
+                    Missing keywords: <span className="font-semibold">{missingSummary}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-sm text-slate-600">
+                After payment, your full report will open on a dedicated results page.
+              </div>
+            </div>
           </div>
         )}
       </section>
 
-      {/* PRICING */}
-      <section id="pricing" className="space-y-4">
-        <h2 className="text-2xl font-semibold text-white">Pricing</h2>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-2">
-          <h3 className="text-xl font-semibold text-white">Full Resume Rewrite</h3>
-          <p className="text-gray-300">₩1,000 (~$2) one-time payment</p>
-          <ul className="list-disc pl-6 text-sm text-gray-400 space-y-1">
-            <li>ATS keyword analysis</li>
-            <li>Matched vs Missing keyword report</li>
-            <li>After-score improvement report</li>
-            <li>Full rewritten resume (max 2 pages)</li>
-          </ul>
+      {/* Pricing */}
+      <section id="pricing" className="mx-auto max-w-6xl px-6 py-10">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8">
+          <h2 className="text-2xl font-semibold">Pricing</h2>
+          <p className="mt-2 text-slate-600">Simple one-time payment.</p>
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+              <div className="text-lg font-semibold">Full report</div>
+              <div className="mt-1 text-3xl font-semibold">₩1,000</div>
+              <div className="text-sm text-slate-600">(~$2) one-time</div>
+              <ul className="mt-4 space-y-2 text-sm text-slate-700 list-disc pl-5">
+                <li>Overall score + 3 sub-scores (Skills/Impact/Brevity)</li>
+                <li>Matched vs Missing keywords by category</li>
+                <li>After-score improvement report</li>
+                <li>Full rewritten resume (max 2 pages)</li>
+              </ul>
+              <div className="mt-6">
+                <PrimaryButton
+                  onClick={() => document.getElementById("analyzer")?.scrollIntoView({ behavior: "smooth" })}
+                >
+                  Start with preview
+                </PrimaryButton>
+              </div>
+            </div>
+
+            <div className="text-sm text-slate-600 space-y-3">
+              <div className="font-semibold text-slate-900">FAQ</div>
+              <div>
+                <div className="font-medium text-slate-800">Does this guarantee interviews?</div>
+                <div>No. It improves clarity and keyword alignment, but outcomes depend on many factors.</div>
+              </div>
+              <div>
+                <div className="font-medium text-slate-800">Do you store my data?</div>
+                <div>
+                  We store the minimum needed to deliver your paid report. We do not sell your data.
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-slate-800">Refund policy</div>
+                <div>Digital product. If you experience technical issues, contact support within 7 days.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500 space-x-4">
+            <a href="/terms" className="hover:text-slate-900">Terms</a>
+            <a href="/privacy" className="hover:text-slate-900">Privacy</a>
+            <a href="/refund" className="hover:text-slate-900">Refund</a>
+            <a href="/contact" className="hover:text-slate-900">Contact</a>
+          </div>
         </div>
       </section>
-
-      {/* ABOUT */}
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-white">About ResumeUp</h2>
-        <p className="text-gray-300">
-          ResumeUp is an independent AI-driven resume optimization service designed for global professionals applying
-          to international roles.
-        </p>
-        <p className="text-gray-300">
-          We optimize keyword alignment, clarity, and impact — while avoiding keyword stuffing and hallucinated metrics.
-        </p>
-      </section>
-
-      <footer className="pt-12 border-t border-white/10 text-sm text-gray-400 space-x-4">
-        <a href="/terms" className="hover:text-white">Terms</a>
-        <a href="/privacy" className="hover:text-white">Privacy</a>
-        <a href="/refund" className="hover:text-white">Refund</a>
-        <a href="/contact" className="hover:text-white">Contact</a>
-      </footer>
     </main>
   );
 }
