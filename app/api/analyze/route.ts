@@ -11,6 +11,79 @@ import {
 } from "@/lib/prompts";
 import { supabaseServer } from "@/lib/supabaseServer";
 
+function clamp(n: number, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function wordCount(text: string) {
+  return (text.trim().match(/\S+/g) || []).length;
+}
+
+function bulletLineRatio(text: string) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return 0;
+  const bullet = lines.filter((l) => /^[-•*]\s+/.test(l)).length;
+  return bullet / lines.length;
+}
+
+function impactSignalsRatio(text: string) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return { signalRatio: 0, todoLines: 0, totalLines: 0 };
+
+  const signalRe =
+    /(\d)|(%|\$|₩)|\b(usd|krw)\b|\b(days?|weeks?|months?|yrs?|years?)\b|\b(x)\b/i;
+  const todoRe = /todo:\s*add metric/i;
+
+  const signalLines = lines.filter((l) => signalRe.test(l)).length;
+  const todoLines = lines.filter((l) => todoRe.test(l)).length;
+
+  return {
+    signalRatio: signalLines / lines.length,
+    todoLines,
+    totalLines: lines.length,
+  };
+}
+
+function computeBrevityScore(text: string) {
+  const w = wordCount(text);
+  const br = bulletLineRatio(text);
+
+  let base: number;
+  if (w <= 450) base = 85;
+  else if (w <= 900) base = 100;
+  else if (w <= 1300) base = 80 - ((w - 900) / 400) * 20; // 80→60
+  else base = 60 - ((w - 1300) / 700) * 30; // 60→30-ish
+
+  let bonus = 0;
+  if (br >= 0.5) bonus = 10;
+  else if (br >= 0.35) bonus = 5;
+
+  return clamp(Math.round(base + bonus));
+}
+
+function computeImpactScore(text: string) {
+  const { signalRatio, todoLines } = impactSignalsRatio(text);
+
+  let base: number;
+  if (signalRatio >= 0.2) base = 90;
+  else if (signalRatio >= 0.1) base = 75;
+  else if (signalRatio > 0) base = 60;
+  else base = 40;
+
+  const penalty = todoLines * 3;
+  return clamp(Math.round(base - penalty));
+}
+
+function computeSkillsScore(rReq: number, rTools: number, rMetrics: number) {
+  const score = 100 * (0.6 * rReq + 0.25 * rTools + 0.15 * rMetrics);
+  return clamp(Math.round(score));
+}
+
+function computeOverall(skills: number, impact: number, brevity: number) {
+  const v = 0.55 * skills + 0.3 * impact + 0.15 * brevity;
+  return clamp(Math.round(v));
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -105,6 +178,19 @@ export async function POST(req: Request) {
 
     const atsScore = Math.round(weighted * 100);
 
+    const skillsBefore = computeSkillsScore(
+      rSkills.rate,
+      rTools.rate,
+      rMetrics.rate
+    );
+    const impactBefore = computeImpactScore(resumeText);
+    const brevityBefore = computeBrevityScore(resumeText);
+    const overallBefore = computeOverall(
+      skillsBefore,
+      impactBefore,
+      brevityBefore
+    );
+
     const gaps = {
       required_skills: list(extracted.required_skills).filter(
         (k: string) => !resumeLower.includes(String(k).toLowerCase())
@@ -139,7 +225,14 @@ export async function POST(req: Request) {
     if (mode === "preview") {
       return NextResponse.json({
         mode,
-        atsScore,
+        overallBefore,
+        subscoresBefore: {
+          skills: skillsBefore,
+          impact: impactBefore,
+          brevity: brevityBefore,
+        },
+        // 기존 값도 유지(호환)
+        atsScore: overallBefore,
         roleProfile,
         extractedKeywords: extracted,
         gaps,
@@ -195,6 +288,19 @@ export async function POST(req: Request) {
       ),
     };
 
+    const skillsAfter = computeSkillsScore(
+      aSkills.rate,
+      aTools.rate,
+      aMetrics.rate
+    );
+    const impactAfter = computeImpactScore(rewrittenResume);
+    const brevityAfter = computeBrevityScore(rewrittenResume);
+    const overallAfter = computeOverall(
+      skillsAfter,
+      impactAfter,
+      brevityAfter
+    );
+
     // --- persist to Supabase (sid must be present in full mode) ---
     if (sid) {
       const sb2 = supabaseServer();
@@ -202,11 +308,20 @@ export async function POST(req: Request) {
         .from("checkout_sessions")
         .update({
           status: "fulfilled",
-          ats_after: atsAfter,
+          ats_after: overallAfter,
           result_json: {
-            ats_before: atsScore,     // this is "before" score computed from original resume
-            ats_after: atsAfter,
-            roleProfile,
+            overall_before: overallBefore,
+            overall_after: overallAfter,
+            subscores_before: {
+              skills: skillsBefore,
+              impact: impactBefore,
+              brevity: brevityBefore,
+            },
+            subscores_after: {
+              skills: skillsAfter,
+              impact: impactAfter,
+              brevity: brevityAfter,
+            },
             extractedKeywords: extracted,
             gaps,
             improvements,
@@ -218,8 +333,20 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       mode,
-      atsScore,      // before
-      atsAfter,      // after
+      atsScore,
+      atsAfter,
+      overallBefore,
+      overallAfter,
+      subscoresBefore: {
+        skills: skillsBefore,
+        impact: impactBefore,
+        brevity: brevityBefore,
+      },
+      subscoresAfter: {
+        skills: skillsAfter,
+        impact: impactAfter,
+        brevity: brevityAfter,
+      },
       roleProfile,
       extractedKeywords: extracted,
       gaps,
