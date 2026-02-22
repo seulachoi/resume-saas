@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
+
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_SID_KEY = "resumeup_sid";
@@ -127,6 +128,14 @@ export default function HomePage() {
   };
 
   const unlock = async (variantId: string) => {
+    const supabase = supabaseBrowser();
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id ?? null;
+
+    if (!userId) {
+      setError("Please sign in to purchase bundles and save credits.");
+      return;
+    }
     setError(null);
 
     if (!result) {
@@ -135,6 +144,9 @@ export default function HomePage() {
     }
 
     try {
+      const supabase = supabaseBrowser();
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id ?? null;
       const res = await fetch("/api/checkout/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

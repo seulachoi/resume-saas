@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const jdText = String(body?.jdText ?? "");
     const atsBefore = Number(body?.atsBefore ?? 0);
     const variantId = String(body?.variantId ?? "");
-
+    const userId = body?.userId ?? null;
     if (resumeText.length < 200 || jdText.length < 200) {
       return NextResponse.json(
         { error: "resumeText and jdText must be at least 200 characters." },
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     const { data: row, error: insErr } = await sb
       .from("checkout_sessions")
       .insert({
+        user_id: userId,
         status: "created",
         resume_text: resumeText,
         jd_text: jdText,
