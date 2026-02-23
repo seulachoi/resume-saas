@@ -56,9 +56,9 @@ export async function POST(req: Request) {
         resume_text: resumeText,
         jd_text: jdText,
         ats_before: atsBefore,
-        credits: creditsToAdd,
+        credits,
         report_title: inferReportTitle(jdText),
-      })
+    
       })
       .select("id")
       .single();
