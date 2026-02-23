@@ -8,26 +8,35 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const run = async () => {
-      try {
-        const supabase = supabaseBrowser();
+      const supabase = supabaseBrowser();
 
-        // Exchange the OAuth "code" for a session and persist it
-        const { error } = await supabase.auth.exchangeCodeForSession(
-          window.location.href
-        );
-
-        if (error) {
-          setMsg(`Login failed: ${error.message}`);
-          return;
-        }
-
-        const params = new URLSearchParams(window.location.search);
-        const next = params.get("next") || "/";
-
+      // 0) 이미 세션이 있으면 바로 next로
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        const next = new URLSearchParams(window.location.search).get("next") || "/";
         window.location.replace(next);
-      } catch (e: any) {
-        setMsg(`Login failed: ${e?.message ?? "Unknown error"}`);
+        return;
       }
+
+      // 1) URL에서 code만 추출
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const next = params.get("next") || "/";
+
+      if (!code) {
+        setMsg("Login failed: missing auth code. Please try again.");
+        return;
+      }
+
+      // 2) code -> session 교환
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        setMsg(`Login failed: ${error.message}`);
+        return;
+      }
+
+      // 3) next로 이동
+      window.location.replace(next);
     };
 
     run();
