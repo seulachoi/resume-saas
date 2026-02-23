@@ -15,6 +15,7 @@ type CheckoutRow = {
   resume_text?: string | null;
   jd_text?: string | null;
   result_json?: any | null;
+  report_title?: string | null; // ✅ NEW
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -27,27 +28,6 @@ function formatDate(s: string) {
   } catch {
     return s;
   }
-}
-
-function Pill({
-  children,
-  tone = "default",
-}: {
-  children: React.ReactNode;
-  tone?: "default" | "success" | "warning";
-}) {
-  const cls =
-    tone === "success"
-      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-      : tone === "warning"
-      ? "bg-amber-50 border-amber-200 text-amber-800"
-      : "bg-slate-50 border-slate-200 text-slate-700";
-
-  return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${cls}`}>
-      {children}
-    </span>
-  );
 }
 
 function PrimaryButton({
@@ -112,7 +92,15 @@ function CreditBadge({ credits }: { credits: number }) {
 }
 
 function deriveLabel(row: CheckoutRow): { title: string; subtitle: string } {
-  // Try to infer from stored result_json (safe fallback)
+  // ✅ report_title(=JD 기반 제목) 우선
+  if (row.report_title && row.report_title.trim()) {
+    return {
+      title: row.report_title.trim(),
+      subtitle: formatDate(row.created_at),
+    };
+  }
+
+  // fallback: roleProfile
   const r = row.result_json || {};
   const rp =
     r.roleProfile ||
@@ -131,7 +119,7 @@ function deriveLabel(row: CheckoutRow): { title: string; subtitle: string } {
     ? `${String(primaryRole)} report`
     : "Resume report";
 
-  const subtitleParts = [];
+  const subtitleParts: string[] = [];
   if (industry) subtitleParts.push(String(industry));
   subtitleParts.push(formatDate(row.created_at));
 
@@ -178,10 +166,9 @@ export default function MyReportsPage() {
       setCredits(Number(cRes.data?.balance ?? 0));
 
       // reports
-      // NOTE: resume_text / jd_text must exist to enable "Reuse inputs" feature
       const { data, error: listErr } = await supabase
         .from("checkout_sessions")
-        .select("id,status,created_at,ats_before,ats_after,resume_text,jd_text,result_json")
+        .select("id,status,created_at,ats_before,ats_after,resume_text,jd_text,result_json,report_title") // ✅ include report_title
         .eq("user_id", u.id)
         .order("created_at", { ascending: false });
 
@@ -222,25 +209,15 @@ export default function MyReportsPage() {
     await supabase.auth.signOut();
   };
 
-  const kpis = useMemo(() => {
-    const done = rows.filter((r) => (r.ats_before ?? null) !== null && (r.ats_after ?? null) !== null);
-    const deltas = done.map((r) => (r.ats_after ?? 0) - (r.ats_before ?? 0));
-    const avg = deltas.length ? Math.round(deltas.reduce((a, b) => a + b, 0) / deltas.length) : 0;
-    const best = deltas.length ? Math.max(...deltas) : 0;
-
-    return {
-      total: rows.length,
-      completed: done.length,
-      avgImprovement: avg,
-      bestImprovement: best,
-    };
-  }, [rows]);
+  const completedRows = useMemo(
+    () => rows.filter((r) => r.status === "fulfilled"),
+    [rows]
+  );
 
   const reuseInputs = (r: CheckoutRow) => {
     try {
       if (r.resume_text) localStorage.setItem(LS_RESUME_KEY, r.resume_text);
       if (r.jd_text) localStorage.setItem(LS_JD_KEY, r.jd_text);
-      // take user to analyzer
       window.location.href = "/#analyzer";
     } catch {
       window.location.href = "/#analyzer";
@@ -248,17 +225,14 @@ export default function MyReportsPage() {
   };
 
   const buyCredits = () => {
-    // Open your existing bundle modal logic on Home:
-    // home listens to ?buy=1&reason=insufficient then opens modal
     window.location.href = "/?buy=1&reason=insufficient#analyzer";
   };
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
-      {/* Header (high contrast) */}
+      {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-          {/* Logo -> Home */}
           <a href="/" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-slate-900" />
             <div className="font-semibold text-slate-900">ResumeUp</div>
@@ -295,10 +269,6 @@ export default function MyReportsPage() {
               {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <SecondaryButton onClick={refresh}>Refresh</SecondaryButton>
-          </div>
         </div>
 
         {/* Not signed in */}
@@ -314,41 +284,9 @@ export default function MyReportsPage() {
           </div>
         )}
 
-        {/* Signed in dashboard */}
+        {/* Signed in */}
         {userId && (
           <>
-            {/* KPI row */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="text-xs text-slate-500">Credits</div>
-                <div className="mt-2 text-3xl font-semibold">{credits ?? 0}</div>
-                <div className="mt-2 text-xs text-slate-500">1 credit = 1 full report</div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="text-xs text-slate-500">Total reports</div>
-                <div className="mt-2 text-3xl font-semibold">{kpis.total}</div>
-                <div className="mt-2 text-xs text-slate-500">All generated sessions</div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="text-xs text-slate-500">Completed</div>
-                <div className="mt-2 text-3xl font-semibold">{kpis.completed}</div>
-                <div className="mt-2 text-xs text-slate-500">With before/after score</div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="text-xs text-slate-500">Avg improvement</div>
-                <div className="mt-2 text-3xl font-semibold">
-                  {kpis.avgImprovement >= 0 ? "+" : ""}
-                  {kpis.avgImprovement}
-                </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Best: {kpis.bestImprovement >= 0 ? "+" : ""}{kpis.bestImprovement}
-                </div>
-              </div>
-            </div>
-
             {/* Credits CTA bar */}
             <div className="rounded-3xl border border-slate-200 bg-slate-900 p-7 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
@@ -393,12 +331,12 @@ export default function MyReportsPage() {
               </div>
             )}
 
-            {/* Reports list (cards) */}
-            {!loading && rows.length === 0 && (
+            {/* Empty state (completed only) */}
+            {!loading && completedRows.length === 0 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-8">
-                <div className="text-xl font-semibold">No reports yet</div>
+                <div className="text-xl font-semibold">No completed reports yet</div>
                 <p className="mt-2 text-slate-600">
-                  Generate your first report from the analyzer.
+                  Reports appear here once completed.
                 </p>
                 <div className="mt-6">
                   <PrimaryButton href="/#analyzer">Start analysis</PrimaryButton>
@@ -406,9 +344,10 @@ export default function MyReportsPage() {
               </div>
             )}
 
-            {!loading && rows.length > 0 && (
+            {/* Completed reports only */}
+            {!loading && completedRows.length > 0 && (
               <div className="grid grid-cols-1 gap-4">
-                {rows.map((r) => {
+                {completedRows.map((r) => {
                   const before = r.ats_before;
                   const after = r.ats_after;
                   const hasScores = before !== null && after !== null;
@@ -416,39 +355,19 @@ export default function MyReportsPage() {
 
                   const label = deriveLabel(r);
 
-                  // user-friendly status (not exposing internal states)
-                  const tone =
-                    r.status === "fulfilled"
-                      ? "success"
-                      : r.status === "paid"
-                      ? "warning"
-                      : "default";
-
-                  const statusLabel =
-                    r.status === "fulfilled"
-                      ? "Completed"
-                      : r.status === "paid"
-                      ? "Processing"
-                      : "Saved";
-
                   return (
                     <div
                       key={r.id}
                       className="rounded-3xl border border-slate-200 bg-white p-6"
                     >
                       <div className="flex items-start justify-between gap-4 flex-wrap">
+                        {/* ✅ Title 강조: JD 기반 title 크게, 날짜는 작게 */}
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-lg font-semibold text-slate-900">
-                              {label.title}
-                            </div>
-                            <Pill tone={tone}>{statusLabel}</Pill>
+                          <div className="text-xl font-semibold text-slate-900">
+                            {label.title}
                           </div>
                           <div className="text-sm text-slate-600">
                             {label.subtitle}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            Session: <span className="font-mono">{r.id}</span>
                           </div>
                         </div>
 
@@ -472,13 +391,14 @@ export default function MyReportsPage() {
                             </div>
                           )}
 
-                          <PrimaryButton href={`/results/${r.id}`}>View report</PrimaryButton>
-
-                          <SecondaryButton
-                            onClick={() => reuseInputs(r)}
-                          >
+                          {/* ✅ 버튼 순서 변경: Reuse -> View */}
+                          <SecondaryButton onClick={() => reuseInputs(r)}>
                             Reuse inputs
                           </SecondaryButton>
+
+                          <PrimaryButton href={`/results/${r.id}`}>
+                            View report
+                          </PrimaryButton>
                         </div>
                       </div>
 
