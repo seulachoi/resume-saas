@@ -88,9 +88,9 @@ export default function SuccessPage() {
     const supabase = supabaseBrowser();
 
     // ✅ Use clean redirect (no hash)
-    const redirectTo = `${window.location.origin}/success?sid=${encodeURIComponent(
-      sid
-    )}`;
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+        `/success?sid=${sid}`
+      )}`;
 
     await supabase.auth.signInWithOAuth({
       provider: "google",
