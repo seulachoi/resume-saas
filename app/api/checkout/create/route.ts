@@ -1,6 +1,24 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
+function inferReportTitle(jdText: string) {
+    const lines = String(jdText || "")
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  
+    const first = lines[0] || "Resume report";
+  
+    // 너무 일반적인 첫줄이면 다음줄 사용 시도
+    const generic = ["about", "company", "overview", "job description"];
+    const isGeneric =
+      generic.some((g) => first.toLowerCase().startsWith(g));
+  
+    const candidate = isGeneric ? (lines[1] || first) : first;
+  
+    return candidate.slice(0, 60);
+  }
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -34,11 +52,13 @@ export async function POST(req: Request) {
       .from("checkout_sessions")
       .insert({
         user_id: userId,
-        status: "created",
+        status: "paid",
         resume_text: resumeText,
         jd_text: jdText,
         ats_before: atsBefore,
-        credits,
+        credits: creditsToAdd,
+        report_title: inferReportTitle(jdText),
+      })
       })
       .select("id")
       .single();
