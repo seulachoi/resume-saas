@@ -19,6 +19,32 @@
   }
 }
 
+@keyframes ringFill {
+  from { transform: rotate(-90deg); stroke-dasharray: 0 999; }
+  to   { transform: rotate(-90deg); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.anim-fadeup { animation: fadeUp 600ms ease-out both; }
+
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim-fadeup { animation: fadeUp 600ms ease-out both; }
+
+@keyframes softPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.anim-softpulse { animation: softPulse 1.6s ease-in-out infinite; }
+
+
 body {
   background: var(--background);
   color: var(--foreground);

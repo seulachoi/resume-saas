@@ -34,8 +34,8 @@ function Chip({
     tone === "missing"
       ? "bg-rose-50 border-rose-200 text-rose-800"
       : tone === "matched"
-      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-      : "bg-indigo-50 border-indigo-200 text-indigo-800";
+        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+        : "bg-indigo-50 border-indigo-200 text-indigo-800";
 
   return (
     <span className={`rounded-full border px-3 py-1 text-xs ${cls}`}>
@@ -102,6 +102,18 @@ export default async function ResultsPage({
   }
 
   const sb = supabaseServer();
+  const { data: authData } = await sb.auth.getUser();
+  const user = authData.user ?? null;
+
+  let balance: number | null = null;
+  if (user?.id) {
+    const { data: cRow } = await sb
+      .from("user_credits")
+      .select("balance")
+      .eq("user_id", user.id)
+      .single();
+    balance = Number(cRow?.balance ?? 0);
+  }
   const { data: session, error } = await sb
     .from("checkout_sessions")
     .select("status, result_json, ats_before, ats_after, created_at")
@@ -210,9 +222,31 @@ export default async function ResultsPage({
               <div className="font-semibold">ResumeUp</div>
             </a>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href="/#analyzer"
+              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+            >
+              Analyze again
+            </a>
+
+            <a
+              href="/my-reports"
+              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+            >
+              My Reports
+            </a>
+
+            {balance !== null && (
+              <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+                Credits
+                <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white/10 px-2 text-white">
+                  {balance}
+                </span>
+              </span>
+            )}
+
             <Pill>Report saved</Pill>
-            <Pill>Secure checkout</Pill>
           </div>
         </div>
       </header>
@@ -226,9 +260,8 @@ export default async function ResultsPage({
               <div className="text-4xl font-semibold">
                 {clamp(overallAfter)}/100{" "}
                 <span
-                  className={`text-base font-semibold ${
-                    delta >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
+                  className={`text-base font-semibold ${delta >= 0 ? "text-emerald-700" : "text-rose-700"
+                    }`}
                 >
                   ({delta >= 0 ? "+" : ""}
                   {delta} pts)
@@ -292,6 +325,68 @@ export default async function ResultsPage({
               <div className="mt-3 text-xs text-slate-500">{desc}</div>
             </div>
           ))}
+        </section>
+
+        {/* INSTANT RESUME REVIEW (more concrete like ResumeWorded) */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-8 space-y-4">
+          <div>
+            <div className="text-2xl font-semibold">Instant resume review</div>
+            <div className="mt-1 text-slate-600">
+              Fast fixes that typically move the score the most.
+            </div>
+          </div>
+
+          {/* Score criteria list */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              {
+                title: "Resume length",
+                status: "good",
+                tip: "Aim for 450–900 words. Keep it scannable.",
+              },
+              {
+                title: "Bullet structure",
+                status: "ok",
+                tip: "Use more bullet points (≥35% of lines). Reduce long paragraphs.",
+              },
+              {
+                title: "Measurable impact",
+                status: "needs_work",
+                tip: "Add 2–3 metrics: %, $, time saved, users, revenue, throughput.",
+              },
+              {
+                title: "Action verbs",
+                status: "good",
+                tip: "Start bullets with strong verbs: Led, Built, Improved, Launched, Optimized.",
+              },
+            ].map((item) => {
+              const badge =
+                item.status === "good"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : item.status === "ok"
+                    ? "bg-amber-50 border-amber-200 text-amber-800"
+                    : "bg-rose-50 border-rose-200 text-rose-800";
+
+              const label =
+                item.status === "good" ? "Strong" : item.status === "ok" ? "Average" : "Fix";
+
+              return (
+                <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold">{item.title}</div>
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge}`}>
+                      {label}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-sm text-slate-700">{item.tip}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="text-xs text-slate-500">
+            We never invent metrics. If unknown, we keep a TODO placeholder instead.
+          </div>
         </section>
 
         {/* KEYWORD REPORT */}
