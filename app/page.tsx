@@ -153,17 +153,18 @@ export default function HomePage() {
 
   useEffect(() => {
     const supabase = supabaseBrowser();
-
-    // 1) 최초 세션 확인
-    supabase.auth.getSession().then(({ data }) => {
-      setUserEmail(data.session?.user?.email ?? null);
-    });
-
-    // 2) 로그인/로그아웃 변화 감지
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
-
+  
+    (async () => {
+      const res = await supabase.auth.getSession();
+      setUserEmail(res.data.session?.user?.email ?? null);
+    })();
+  
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (event: string, session: any) => {
+        setUserEmail(session?.user?.email ?? null);
+      }
+    );
+  
     return () => {
       sub.subscription.unsubscribe();
     };
