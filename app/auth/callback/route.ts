@@ -11,10 +11,12 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/?auth=missing_code", url.origin));
   }
 
-  // ✅ 반드시 response를 만들고, 그 response에 set-cookie를 실어 보냄
+  // ✅ redirect 응답을 먼저 만들고, 그 응답에 쿠키를 확실히 실어 보냄
   let response = NextResponse.redirect(new URL(next, url.origin));
 
+  // Next.js 16: cookies() may be async
   const cookieStore = await cookies();
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -35,7 +37,6 @@ export async function GET(request: Request) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    // 실패해도 쿠키 포함 응답은 필요 없으니 실패 페이지로
     response = NextResponse.redirect(new URL("/?auth=exchange_failed", url.origin));
   }
 
