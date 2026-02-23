@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   try {
     payload = await req.json();
   } catch {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, note: "invalid_json" });
   }
 
   const eventName =
@@ -22,17 +22,11 @@ export async function POST(req: Request) {
 
   const orderId = payload?.data?.id ? String(payload.data.id) : null;
 
-  // Lemon payload includes purchaser email
-  const purchaserEmail =
-    payload?.data?.attributes?.user_email
-      ? String(payload.data.attributes.user_email)
-      : null;
-
   if (!sid) return NextResponse.json({ ok: true, note: "sid_missing" });
 
   const sb = supabaseServer();
 
-  // 1) Mark session as paid and fetch user_id, credits
+  // 1) mark paid and fetch user_id/credits
   const { data: session, error: updErr } = await sb
     .from("checkout_sessions")
     .update({
@@ -47,30 +41,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, note: "session_update_failed" });
   }
 
-  let userId: string | null = session.user_id ? String(session.user_id) : null;
+  const userId = session.user_id ? String(session.user_id) : null;
   const credits = Number(session.credits ?? 1);
 
-  // 2) If user_id is missing, try to attach by matching auth.users email
-  //    (service_role can read auth.users)
-  if (!userId && purchaserEmail) {
-    const { data: users, error: userErr } = await sb
-      .from("auth.users")
-      .select("id,email")
-      .eq("email", purchaserEmail)
-      .limit(1);
-
-    if (!userErr && users && users.length > 0) {
-      userId = String(users[0].id);
-
-      // persist back to checkout_sessions
-      await sb.from("checkout_sessions").update({ user_id: userId }).eq("id", sid);
-    }
+  if (!userId) {
+    return NextResponse.json({ ok: true, note: "user_id_missing_no_topup" });
   }
 
-  // 3) If we have userId, top up credits
-  if (userId) {
-    await sb.rpc("add_credits", { p_user_id: userId, p_amount: credits });
+  // 2) credit top-up
+  const { error: rpcErr } = await sb.rpc("add_credits", {
+    p_user_id: userId,
+    p_amount: credits,
+  });
+
+  if (rpcErr) {
+    return NextResponse.json({ ok: true, note: "add_credits_failed", rpc: rpcErr.message });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, note: "credits_added", userId, credits });
 }
