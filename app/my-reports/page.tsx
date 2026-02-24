@@ -15,7 +15,7 @@ type CheckoutRow = {
   resume_text?: string | null;
   jd_text?: string | null;
   result_json?: any | null;
-  report_title?: string | null; // ✅ NEW
+  report_title?: string | null;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -34,18 +34,33 @@ function PrimaryButton({
   children,
   onClick,
   href,
+  className = "",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   href?: string;
+  className?: string;
 }) {
-  const cls =
-    "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white " +
-    "bg-slate-900 hover:bg-slate-800 transition";
+  const base =
+    "inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition " +
+    "focus:outline-none focus:ring-4 focus:ring-emerald-300/40";
 
-  if (href) return <a href={href} className={cls}>{children}</a>;
+  if (href)
+    return (
+      <a
+        href={href}
+        className={`${base} bg-slate-900 text-white hover:bg-slate-800 ${className}`}
+      >
+        {children}
+      </a>
+    );
+
   return (
-    <button type="button" onClick={onClick} className={cls}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${base} bg-slate-900 text-white hover:bg-slate-800 ${className}`}
+    >
       {children}
     </button>
   );
@@ -55,30 +70,33 @@ function SecondaryButton({
   children,
   onClick,
   href,
+  className = "",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   href?: string;
+  className?: string;
 }) {
-  const cls =
-    "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold " +
-    "border border-slate-200 bg-white hover:bg-slate-50 transition text-slate-900";
+  const base =
+    "inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition " +
+    "border border-slate-200 bg-white hover:bg-slate-50 text-slate-900";
 
-  if (href) return <a href={href} className={cls}>{children}</a>;
+  if (href) return <a href={href} className={`${base} ${className}`}>{children}</a>;
+
   return (
-    <button type="button" onClick={onClick} className={cls}>
+    <button type="button" onClick={onClick} className={`${base} ${className}`}>
       {children}
     </button>
   );
 }
 
 function CreditBadge({ credits }: { credits: number }) {
-  const tone = credits <= 1 ? "warning" : "success";
+  const low = credits <= 1;
   return (
     <span
       className={[
-        "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold border",
-        tone === "warning"
+        "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border",
+        low
           ? "bg-amber-50 border-amber-200 text-amber-900"
           : "bg-emerald-50 border-emerald-200 text-emerald-900",
       ].join(" ")}
@@ -91,16 +109,9 @@ function CreditBadge({ credits }: { credits: number }) {
   );
 }
 
-function deriveLabel(row: CheckoutRow): { title: string; subtitle: string } {
-  // ✅ report_title(=JD 기반 제목) 우선
-  if (row.report_title && row.report_title.trim()) {
-    return {
-      title: row.report_title.trim(),
-      subtitle: formatDate(row.created_at),
-    };
-  }
+function deriveTitle(row: CheckoutRow): string {
+  if (row.report_title && row.report_title.trim()) return row.report_title.trim();
 
-  // fallback: roleProfile
   const r = row.result_json || {};
   const rp =
     r.roleProfile ||
@@ -112,18 +123,7 @@ function deriveLabel(row: CheckoutRow): { title: string; subtitle: string } {
   const primaryRole =
     rp?.primary_role || rp?.primaryRole || r?.roleProfile?.primary_role || null;
 
-  const industry =
-    rp?.industry || r?.roleProfile?.industry || null;
-
-  const title = primaryRole
-    ? `${String(primaryRole)} report`
-    : "Resume report";
-
-  const subtitleParts: string[] = [];
-  if (industry) subtitleParts.push(String(industry));
-  subtitleParts.push(formatDate(row.created_at));
-
-  return { title, subtitle: subtitleParts.join(" • ") };
+  return primaryRole ? String(primaryRole) : "Resume report";
 }
 
 export default function MyReportsPage() {
@@ -142,10 +142,8 @@ export default function MyReportsPage() {
     try {
       const supabase = supabaseBrowser();
 
-      // user
       const uRes = await supabase.auth.getUser();
       const u = uRes.data.user ?? null;
-
       setUserId(u?.id ?? null);
       setUserEmail(u?.email ?? null);
 
@@ -156,7 +154,6 @@ export default function MyReportsPage() {
         return;
       }
 
-      // credits
       const cRes = await supabase
         .from("user_credits")
         .select("balance")
@@ -165,10 +162,9 @@ export default function MyReportsPage() {
 
       setCredits(Number(cRes.data?.balance ?? 0));
 
-      // reports
       const { data, error: listErr } = await supabase
         .from("checkout_sessions")
-        .select("id,status,created_at,ats_before,ats_after,resume_text,jd_text,result_json,report_title") // ✅ include report_title
+        .select("id,status,created_at,ats_before,ats_after,resume_text,jd_text,result_json,report_title")
         .eq("user_id", u.id)
         .order("created_at", { ascending: false });
 
@@ -188,9 +184,7 @@ export default function MyReportsPage() {
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       refresh();
     });
-    return () => {
-      sub.subscription.unsubscribe();
-    };
+    return () => sub.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -230,7 +224,7 @@ export default function MyReportsPage() {
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
-      {/* Header */}
+      {/* Header (minimal, high contrast) */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2">
@@ -239,20 +233,12 @@ export default function MyReportsPage() {
           </a>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <a className="text-sm text-slate-600 hover:text-slate-900" href="/#pricing">
-              Pricing
-            </a>
-            <a className="text-sm text-slate-600 hover:text-slate-900" href="/terms">
-              Terms
-            </a>
-
+            {userId && credits !== null && <CreditBadge credits={credits} />}
+            <SecondaryButton href="/my-reports" className="border-slate-900 text-slate-900">
+              My Reports
+            </SecondaryButton>
             {userId ? (
-              <>
-                {credits !== null && <CreditBadge credits={credits} />}
-                <SecondaryButton href="/#analyzer">New analysis</SecondaryButton>
-                <SecondaryButton href="/my-reports">My Reports</SecondaryButton>
-                <SecondaryButton onClick={signOut}>Sign out</SecondaryButton>
-              </>
+              <SecondaryButton onClick={signOut}>Sign out</SecondaryButton>
             ) : (
               <PrimaryButton onClick={signInWithGoogle}>Sign in</PrimaryButton>
             )}
@@ -262,16 +248,13 @@ export default function MyReportsPage() {
 
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-8">
         {/* Title */}
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-4xl font-semibold">My Reports</h1>
-            <p className="text-sm text-slate-600">
-              {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-5xl font-semibold">My Reports</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
+          </p>
         </div>
 
-        {/* Not signed in */}
         {!userId && (
           <div className="rounded-3xl border border-slate-200 bg-white p-8">
             <div className="text-xl font-semibold">Sign in to see your saved reports</div>
@@ -284,59 +267,60 @@ export default function MyReportsPage() {
           </div>
         )}
 
-        {/* Signed in */}
         {userId && (
           <>
-            {/* Credits CTA bar */}
-            <div className="rounded-3xl border border-slate-200 bg-slate-900 p-7 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <div className="text-sm text-white/70">Available credits</div>
-                <div className="mt-1 text-4xl font-semibold">{credits ?? 0}</div>
-                <div className="mt-2 text-sm text-white/70">
-                  Use credits for recruiter-grade full rewrites and after-score reports.
+            {/* Credits hero card (purple + green accents) */}
+            <div className="rounded-3xl border border-slate-200 overflow-hidden">
+              <div className="bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-8 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div>
+                  <div className="text-sm text-white/70 font-semibold">Available credits</div>
+                  <div className="mt-2 text-5xl font-semibold">{credits ?? 0}</div>
+                  <div className="mt-3 text-sm text-white/75">
+                    Each full report uses <span className="font-semibold text-white">1 credit</span>.
+                    Generate recruiter-grade rewrites with after-score improvements.
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
-                <a
-                  href="/#analyzer"
-                  className="inline-flex items-center justify-center rounded-2xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-300 transition"
-                >
-                  Use a credit (new analysis)
-                </a>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <a
+                    href="/#analyzer"
+                    className="inline-flex items-center justify-center rounded-2xl px-7 py-4 text-base font-semibold text-slate-950
+                               bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
+                               shadow-xl shadow-emerald-500/25 transition
+                               hover:scale-[1.02] active:scale-[0.99]"
+                  >
+                    Generate a full report (use 1 credit)
+                  </a>
 
-                {(credits ?? 0) <= 1 && (
                   <button
                     type="button"
                     onClick={buyCredits}
-                    className="inline-flex items-center justify-center rounded-2xl bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15 border border-white/20 transition"
+                    className="inline-flex items-center justify-center rounded-2xl px-6 py-4 text-base font-semibold
+                               bg-white/10 hover:bg-white/15 border border-white/20 text-white transition"
                   >
-                    Buy more credits
+                    Top up credits
                   </button>
-                )}
+                </div>
               </div>
             </div>
 
-            {/* Errors */}
             {error && (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
                 {error}
               </div>
             )}
 
-            {/* Loading */}
             {loading && (
               <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
                 Loading…
               </div>
             )}
 
-            {/* Empty state (completed only) */}
             {!loading && completedRows.length === 0 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-8">
                 <div className="text-xl font-semibold">No completed reports yet</div>
                 <p className="mt-2 text-slate-600">
-                  Reports appear here once completed.
+                  Your completed reports will appear here.
                 </p>
                 <div className="mt-6">
                   <PrimaryButton href="/#analyzer">Start analysis</PrimaryButton>
@@ -344,61 +328,52 @@ export default function MyReportsPage() {
               </div>
             )}
 
-            {/* Completed reports only */}
+            {/* Report cards */}
             {!loading && completedRows.length > 0 && (
               <div className="grid grid-cols-1 gap-4">
                 {completedRows.map((r) => {
                   const before = r.ats_before;
                   const after = r.ats_after;
                   const hasScores = before !== null && after !== null;
-                  const delta = hasScores ? (after! - before!) : null;
+                  const delta = hasScores ? after! - before! : null;
 
-                  const label = deriveLabel(r);
+                  const title = deriveTitle(r);
+                  const subtitle = formatDate(r.created_at);
 
                   return (
-                    <div
-                      key={r.id}
-                      className="rounded-3xl border border-slate-200 bg-white p-6"
-                    >
+                    <div key={r.id} className="rounded-3xl border border-slate-200 bg-white p-6">
                       <div className="flex items-start justify-between gap-4 flex-wrap">
-                        {/* ✅ Title 강조: JD 기반 title 크게, 날짜는 작게 */}
-                        <div className="space-y-1">
-                          <div className="text-xl font-semibold text-slate-900">
-                            {label.title}
-                          </div>
-                          <div className="text-sm text-slate-600">
-                            {label.subtitle}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 flex-wrap">
-                          {hasScores ? (
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                              <div className="text-xs text-slate-500">Score</div>
-                              <div className="mt-1 text-sm font-semibold text-slate-900">
+                        {/* Left: Score block (more visible) */}
+                        <div className="flex items-center gap-4">
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 min-w-[220px]">
+                            <div className="text-xs text-slate-500">Score</div>
+                            {hasScores ? (
+                              <div className="mt-1 text-base font-semibold text-slate-900">
                                 {clamp(before!)} → {clamp(after!)}{" "}
                                 <span className={delta! >= 0 ? "text-emerald-700" : "text-rose-700"}>
                                   ({delta! >= 0 ? "+" : ""}{delta} pts)
                                 </span>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                              <div className="text-xs text-slate-500">Score</div>
-                              <div className="mt-1 text-sm font-semibold text-slate-900">
+                            ) : (
+                              <div className="mt-1 text-base font-semibold text-slate-900">
                                 {before !== null ? clamp(before) : "—"} → —
                               </div>
+                            )}
+                          </div>
+
+                          {/* Middle: Title */}
+                          <div className="space-y-1">
+                            <div className="text-xl font-semibold text-slate-900">
+                              {title}
                             </div>
-                          )}
+                            <div className="text-sm text-slate-600">{subtitle}</div>
+                          </div>
+                        </div>
 
-                          {/* ✅ 버튼 순서 변경: Reuse -> View */}
-                          <SecondaryButton onClick={() => reuseInputs(r)}>
-                            Reuse inputs
-                          </SecondaryButton>
-
-                          <PrimaryButton href={`/results/${r.id}`}>
-                            View report
-                          </PrimaryButton>
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <SecondaryButton onClick={() => reuseInputs(r)}>Reuse inputs</SecondaryButton>
+                          <PrimaryButton href={`/results/${r.id}`}>View report</PrimaryButton>
                         </div>
                       </div>
 
