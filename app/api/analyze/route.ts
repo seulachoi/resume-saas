@@ -8,8 +8,12 @@ import {
   rewriteSystem,
   rewriteUser,
   type RoleProfile,
+  type Track,
+  type Seniority,
 } from "@/lib/prompts";
 import { supabaseServer } from "@/lib/supabaseServer";
+
+/** ---------- helpers ---------- */
 
 function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, n));
@@ -51,8 +55,8 @@ function computeBrevityScore(text: string) {
   let base: number;
   if (w <= 450) base = 85;
   else if (w <= 900) base = 100;
-  else if (w <= 1300) base = 80 - ((w - 900) / 400) * 20; // 80→60
-  else base = 60 - ((w - 1300) / 700) * 30; // 60→30-ish
+  else if (w <= 1300) base = 80 - ((w - 900) / 400) * 20;
+  else base = 60 - ((w - 1300) / 700) * 30;
 
   let bonus = 0;
   if (br >= 0.5) bonus = 10;
@@ -61,21 +65,57 @@ function computeBrevityScore(text: string) {
   return clamp(Math.round(base + bonus));
 }
 
-function computeImpactScore(text: string) {
+function computeImpactScore(text: string, seniority: Seniority) {
   const { signalRatio, todoLines } = impactSignalsRatio(text);
 
   let base: number;
-  if (signalRatio >= 0.2) base = 90;
-  else if (signalRatio >= 0.1) base = 75;
-  else if (signalRatio > 0) base = 60;
-  else base = 40;
+  if (seniority === "senior") {
+    if (signalRatio >= 0.2) base = 95;
+    else if (signalRatio >= 0.12) base = 80;
+    else if (signalRatio > 0) base = 60;
+    else base = 35;
+  } else if (seniority === "mid") {
+    if (signalRatio >= 0.2) base = 90;
+    else if (signalRatio >= 0.1) base = 75;
+    else if (signalRatio > 0) base = 60;
+    else base = 40;
+  } else {
+    if (signalRatio >= 0.12) base = 85;
+    else if (signalRatio >= 0.06) base = 70;
+    else if (signalRatio > 0) base = 60;
+    else base = 45;
+  }
 
   const penalty = todoLines * 3;
   return clamp(Math.round(base - penalty));
 }
 
-function computeSkillsScore(rReq: number, rTools: number, rMetrics: number) {
-  const score = 100 * (0.6 * rReq + 0.25 * rTools + 0.15 * rMetrics);
+function computeSkillsScoreByTrack(track: Track, rReq: number, rTools: number, rMetrics: number) {
+  let wReq = 0.6;
+  let wTools = 0.25;
+  let wMetrics = 0.15;
+
+  switch (track) {
+    case "engineering":
+      wReq = 0.45; wTools = 0.35; wMetrics = 0.20; break;
+    case "data_analytics":
+      wReq = 0.45; wTools = 0.30; wMetrics = 0.25; break;
+    case "marketing_growth":
+      wReq = 0.55; wTools = 0.20; wMetrics = 0.25; break;
+    case "strategy_bizops":
+      wReq = 0.60; wTools = 0.20; wMetrics = 0.20; break;
+    case "sales_bd":
+      wReq = 0.60; wTools = 0.20; wMetrics = 0.20; break;
+    case "design_ux":
+      wReq = 0.65; wTools = 0.20; wMetrics = 0.15; break;
+    case "operations_program":
+      wReq = 0.60; wTools = 0.25; wMetrics = 0.15; break;
+    case "product_manager":
+    default:
+      wReq = 0.60; wTools = 0.25; wMetrics = 0.15; break;
+  }
+
+  const score = 100 * (wReq * rReq + wTools * rTools + wMetrics * rMetrics);
   return clamp(Math.round(score));
 }
 
@@ -84,23 +124,39 @@ function computeOverall(skills: number, impact: number, brevity: number) {
   return clamp(Math.round(v));
 }
 
+function isTrack(x: any): x is Track {
+  return [
+    "product_manager",
+    "strategy_bizops",
+    "data_analytics",
+    "engineering",
+    "marketing_growth",
+    "sales_bd",
+    "design_ux",
+    "operations_program",
+  ].includes(String(x));
+}
+
+function isSeniority(x: any): x is Seniority {
+  return ["entry", "mid", "senior"].includes(String(x));
+}
+
+/** ---------- handler ---------- */
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const resumeText = String(body?.resumeText ?? "");
-    const jdText = String(body?.jdText ?? "");
-    const mode = (body?.mode === "full" ? "full" : "preview") as
-      | "preview"
-      | "full";
-    const sid = String(body?.sid ?? ""); // ✅ required for full
+    const mode = (body?.mode === "full" ? "full" : "preview") as "preview" | "full";
+    const sid = String(body?.sid ?? "");
 
-    if (resumeText.length < 200 || jdText.length < 200) {
-      return NextResponse.json(
-        { error: "resumeText and jdText must be at least 200 characters." },
-        { status: 400 }
-      );
-    }
+    // Body inputs (preview uses these)
+    let resumeText = String(body?.resumeText ?? "");
+    let jdText = String(body?.jdText ?? "");
+
+    // Default context (preview fallback)
+    let track: Track = isTrack(body?.track) ? body.track : "product_manager";
+    let seniority: Seniority = isSeniority(body?.seniority) ? body.seniority : "mid";
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -109,19 +165,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ FULL mode: require paid sid
+    const sb = supabaseServer();
+
+    // ✅ FULL mode: verify payment + load DB context (and optionally resume/jd from DB)
     if (mode === "full") {
       if (!sid) {
-        return NextResponse.json(
-          { error: "Missing sid for full mode" },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: "Missing sid for full mode" }, { status: 403 });
       }
 
-      const sb = supabaseServer();
       const { data: session, error: sessErr } = await sb
         .from("checkout_sessions")
-        .select("status")
+        .select("status, resume_text, jd_text, target_track, target_seniority")
         .eq("id", sid)
         .single();
 
@@ -130,16 +184,33 @@ export async function POST(req: Request) {
       }
 
       if (session.status !== "paid" && session.status !== "fulfilled") {
-        return NextResponse.json(
-          { error: "Payment not confirmed" },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: "Payment not confirmed" }, { status: 403 });
       }
+
+      // ✅ DB context wins (this is the “recommended design”)
+      if (isTrack(session.target_track)) track = session.target_track;
+      if (isSeniority(session.target_seniority)) seniority = session.target_seniority;
+
+      // ✅ prefer DB resume/jd if present (more reliable for regenerated reports)
+      if (typeof session.resume_text === "string" && session.resume_text.length >= 200) {
+        resumeText = session.resume_text;
+      }
+      if (typeof session.jd_text === "string" && session.jd_text.length >= 200) {
+        jdText = session.jd_text;
+      }
+    }
+
+    // Validate inputs (now that full may have loaded from DB)
+    if (resumeText.length < 200 || jdText.length < 200) {
+      return NextResponse.json(
+        { error: "resumeText and jdText must be at least 200 characters." },
+        { status: 400 }
+      );
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // 1) JD keyword extraction (fast + cheap)
+    // 1) JD keyword extraction
     const extract = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
@@ -152,15 +223,13 @@ export async function POST(req: Request) {
 
     const extracted = JSON.parse(extract.choices[0].message.content || "{}");
 
-    // 2) Matching score
+    // 2) Keyword matching
     const resumeLower = resumeText.toLowerCase();
     const list = (x: any) => (Array.isArray(x) ? x : []);
 
     const countMatch = (arr: string[]) => {
       const total = arr.length || 1;
-      const matched = arr.filter((k) =>
-        resumeLower.includes(String(k).toLowerCase())
-      ).length;
+      const matched = arr.filter((k) => resumeLower.includes(String(k).toLowerCase())).length;
       return { matched, total, rate: matched / total };
     };
 
@@ -170,26 +239,15 @@ export async function POST(req: Request) {
     const rSoft = countMatch(list(extracted.soft_skills));
 
     const weighted =
-      (rSkills.rate * 2.0 +
-        rTools.rate * 1.5 +
-        rMetrics.rate * 2.0 +
-        rSoft.rate * 1.0) /
+      (rSkills.rate * 2.0 + rTools.rate * 1.5 + rMetrics.rate * 2.0 + rSoft.rate * 1.0) /
       (2.0 + 1.5 + 2.0 + 1.0);
 
     const atsScore = Math.round(weighted * 100);
 
-    const skillsBefore = computeSkillsScore(
-      rSkills.rate,
-      rTools.rate,
-      rMetrics.rate
-    );
-    const impactBefore = computeImpactScore(resumeText);
+    const skillsBefore = computeSkillsScoreByTrack(track, rSkills.rate, rTools.rate, rMetrics.rate);
+    const impactBefore = computeImpactScore(resumeText, seniority);
     const brevityBefore = computeBrevityScore(resumeText);
-    const overallBefore = computeOverall(
-      skillsBefore,
-      impactBefore,
-      brevityBefore
-    );
+    const overallBefore = computeOverall(skillsBefore, impactBefore, brevityBefore);
 
     const gaps = {
       required_skills: list(extracted.required_skills).filter(
@@ -206,33 +264,31 @@ export async function POST(req: Request) {
       ),
     };
 
-    // 3) Role inference (cheap)
+    // 3) Role inference (context-aware)
     const roleResp = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
       messages: [
         { role: "system", content: ROLE_INFER_SYSTEM.trim() },
-        { role: "user", content: roleInferUser(resumeText, jdText) },
+        { role: "user", content: roleInferUser(resumeText, jdText, track, seniority) },
       ],
       response_format: { type: "json_object" } as any,
     });
 
-    const roleProfile = JSON.parse(
-      roleResp.choices[0].message.content || "{}"
-    ) as RoleProfile;
+    const roleProfile = JSON.parse(roleResp.choices[0].message.content || "{}") as RoleProfile;
 
-    // Preview: no rewrite (save cost)
+    // Preview: no rewrite
     if (mode === "preview") {
       return NextResponse.json({
         mode,
+        selectedContext: { track, seniority },
         overallBefore,
         subscoresBefore: {
           skills: skillsBefore,
           impact: impactBefore,
           brevity: brevityBefore,
         },
-        // 기존 값도 유지(호환)
-        atsScore: overallBefore,
+        atsScore: overallBefore, // backward compatibility
         roleProfile,
         extractedKeywords: extracted,
         gaps,
@@ -245,14 +301,14 @@ export async function POST(req: Request) {
       model: "gpt-4o",
       temperature: 0.3,
       messages: [
-        { role: "system", content: rewriteSystem(roleProfile) },
+        { role: "system", content: rewriteSystem({ roleProfile, track, seniority }) },
         { role: "user", content: rewriteUser({ resumeText, jdText, gapsJson: gaps }) },
       ],
     });
 
     const rewrittenResume = rewrite.choices[0].message.content || "";
 
-    // --- compute ATS after using the same extracted keyword lists ---
+    // --- ATS after ---
     const rewrittenLower = rewrittenResume.toLowerCase();
 
     const countMatchText = (textLower: string, arr: string[]) => {
@@ -272,7 +328,6 @@ export async function POST(req: Request) {
 
     const atsAfter = Math.round(weightedAfter * 100);
 
-    // --- improvements: which gap keywords are now included in the rewritten resume ---
     const improvements = {
       required_skills_added: gaps.required_skills.filter((k: string) =>
         rewrittenLower.includes(String(k).toLowerCase())
@@ -288,28 +343,20 @@ export async function POST(req: Request) {
       ),
     };
 
-    const skillsAfter = computeSkillsScore(
-      aSkills.rate,
-      aTools.rate,
-      aMetrics.rate
-    );
-    const impactAfter = computeImpactScore(rewrittenResume);
+    const skillsAfter = computeSkillsScoreByTrack(track, aSkills.rate, aTools.rate, aMetrics.rate);
+    const impactAfter = computeImpactScore(rewrittenResume, seniority);
     const brevityAfter = computeBrevityScore(rewrittenResume);
-    const overallAfter = computeOverall(
-      skillsAfter,
-      impactAfter,
-      brevityAfter
-    );
+    const overallAfter = computeOverall(skillsAfter, impactAfter, brevityAfter);
 
-    // --- persist to Supabase (sid must be present in full mode) ---
+    // --- persist to Supabase ---
     if (sid) {
-      const sb2 = supabaseServer();
-      await sb2
+      await sb
         .from("checkout_sessions")
         .update({
           status: "fulfilled",
           ats_after: overallAfter,
           result_json: {
+            selectedContext: { track, seniority },
             overall_before: overallBefore,
             overall_after: overallAfter,
             subscores_before: {
@@ -333,6 +380,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       mode,
+      selectedContext: { track, seniority },
       atsScore,
       atsAfter,
       overallBefore,
@@ -354,9 +402,6 @@ export async function POST(req: Request) {
       rewrittenResume,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message ?? "Unknown error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message ?? "Unknown error" }, { status: 500 });
   }
 }

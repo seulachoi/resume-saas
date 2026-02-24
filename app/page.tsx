@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import type { Track, Seniority } from "@/lib/prompts";
 
 
 const LS_RESUME_KEY = "resumeup_resumeText";
@@ -499,6 +500,23 @@ function WhyResumeUpSection() {
   );
 }
 
+const TRACKS: { key: Track; label: string }[] = [
+  { key: "product_manager", label: "Product Manager" },
+  { key: "strategy_bizops", label: "Strategy / BizOps" },
+  { key: "data_analytics", label: "Data & Analytics" },
+  { key: "engineering", label: "Software Engineering" },
+  { key: "marketing_growth", label: "Marketing / Growth" },
+  { key: "sales_bd", label: "Sales / Business Dev" },
+  { key: "design_ux", label: "Design / UX" },
+  { key: "operations_program", label: "Operations / Program" },
+];
+
+const SENIORITIES: { key: Seniority; label: string }[] = [
+  { key: "entry", label: "Entry (0–2y)" },
+  { key: "mid", label: "Mid (3–6y)" },
+  { key: "senior", label: "Senior (7y+)" },
+];
+
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
@@ -510,6 +528,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
+  const [track, setTrack] = useState<Track>("product_manager");
+  const [seniority, setSeniority] = useState<Seniority>("mid");
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
     await supabase.auth.signInWithOAuth({
@@ -689,7 +709,13 @@ export default function HomePage() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText, jdText, mode: "preview" }),
+        body: JSON.stringify({
+          resumeText,
+          jdText,
+          mode: "preview",
+          track,
+          seniority,
+        }),
       });
 
       const data = await res.json();
@@ -767,6 +793,11 @@ export default function HomePage() {
   }, [result]);
 
   const how = useInViewOnce<HTMLDivElement>(0.25);
+
+
+
+  type Seniority = "entry" | "mid" | "senior";
+
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -1175,7 +1206,83 @@ export default function HomePage() {
           </p>
         </div>
 
+
         <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-6 shadow-sm">
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Target role context</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Optional but recommended — improves scoring and rewrite precision.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTrack("product_manager");
+                  setSeniority("mid");
+                }}
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline underline-offset-4"
+              >
+                Reset
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-500 mb-2">Role track</div>
+              <div className="flex flex-wrap gap-2">
+                {TRACKS.map((t) => {
+                  const active = t.key === track;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTrack(t.key)}
+                      className={[
+                        "rounded-full px-3 py-2 text-sm font-semibold border transition",
+                        active
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-900"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-500 mb-2">Seniority</div>
+              <div className="flex flex-wrap gap-2">
+                {SENIORITIES.map((s) => {
+                  const active = s.key === seniority;
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => setSeniority(s.key)}
+                      className={[
+                        "rounded-full px-3 py-2 text-sm font-semibold border transition",
+                        active
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 text-xs text-slate-500">
+              We’ll tailor keyword expectations, impact thresholds, and rewrite style to your selection.
+            </div>
+          </div>
+
           {/* Inputs */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">

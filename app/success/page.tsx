@@ -12,11 +12,11 @@ async function sleep(ms: number) {
 export default function SuccessPage() {
   const [sid, setSid] = useState<string>("");
   const [status, setStatus] = useState<Status>("loading");
-  const [message, setMessage] = useState<string>("Preparing your report…");
+  const [message, setMessage] = useState<string>("Preparing…");
   const [error, setError] = useState<string>("");
 
-  // ✅ poll session until user is available (fixes login loop)
-  const waitForUser = async (maxMs = 6000) => {
+  // Wait for user session (prevents OAuth loop)
+  const waitForUser = async (maxMs = 7000) => {
     const supabase = supabaseBrowser();
     const start = Date.now();
     while (Date.now() - start < maxMs) {
@@ -30,43 +30,50 @@ export default function SuccessPage() {
 
   const runGenerate = async (sidValue: string) => {
     setStatus("generating");
-    setMessage("Confirming payment & generating your report…");
     setError("");
+    setMessage("Confirming payment…");
 
-    const uid = await waitForUser(6000);
+    // Prefer having a user (bind purchase to account + credits)
+    const uid = await waitForUser(7000);
 
     if (!uid) {
       setStatus("need_signin");
-      setMessage("Sign-in required to use credits.");
+      setMessage("Sign in required to attach this purchase to your account.");
       return;
     }
+
+    setMessage("Generating… (this can take up to ~90s)");
 
     const res = await fetch("/api/results/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // ✅ userId is optional; still send for post-payment binding if session user_id is missing
       body: JSON.stringify({ sid: sidValue, userId: uid }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      const msg = String(data?.error || "Failed to generate report");
+      const msg = String(data?.error || "Failed to complete the purchase");
       setStatus("error");
       setError(msg);
       return;
     }
 
+    // ✅ If this was a top-up only purchase, go to My Results (credits page)
+    if (data?.topupOnly) {
+      window.location.href = "/my-reports";
+      return;
+    }
+
+    // Otherwise, this purchase generates a report
     window.location.href = `/results/${sidValue}`;
   };
 
   useEffect(() => {
-    // ✅ Remove hash fragments if any (avoid weird loop)
+    // Remove hash fragments (avoid loop)
     if (window.location.hash) {
-      window.history.replaceState(
-        {},
-        "",
-        window.location.pathname + window.location.search
-      );
+      window.history.replaceState({}, "", window.location.pathname + window.location.search);
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -79,18 +86,15 @@ export default function SuccessPage() {
       return;
     }
 
-    // Try generate immediately (if already logged in)
     runGenerate(sidFromQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signIn = async () => {
     const supabase = supabaseBrowser();
-
-    // ✅ Use clean redirect (no hash)
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-        `/success?sid=${sid}`
-      )}`;
+      `/success?sid=${sid}`
+    )}`;
 
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -100,7 +104,7 @@ export default function SuccessPage() {
 
   return (
     <main className="min-h-screen bg-white flex items-center justify-center p-8">
-      <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+      <div className="max-w-md w-full rounded-3xl border border-slate-200 bg-white p-7 space-y-4">
         <div className="text-xl font-semibold text-slate-900">ResumeUp</div>
 
         <div className="text-slate-700">{message}</div>
@@ -114,17 +118,19 @@ export default function SuccessPage() {
         {status === "need_signin" && (
           <div className="space-y-3">
             <div className="text-sm text-slate-600">
-              Please sign in to attach this purchase to your account and use credits.
+              Please sign in to attach this purchase to your account and apply credits.
             </div>
+
             <button
               onClick={signIn}
-              className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 w-full"
+              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 w-full"
             >
               Sign in with Google
             </button>
+
             <button
               onClick={() => runGenerate(sid)}
-              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 w-full"
+              className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 w-full"
             >
               I already signed in — continue
             </button>
@@ -132,13 +138,14 @@ export default function SuccessPage() {
         )}
 
         {status === "error" && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800 text-sm">
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-800 text-sm">
             {error}
           </div>
         )}
 
         <div className="text-xs text-slate-500">
-          This usually takes 30–90 seconds depending on resume length.
+          If you purchased credits only, you’ll be redirected to <b>My Results</b>.
+          If you purchased a report, you’ll be redirected to the generated report page.
         </div>
       </div>
     </main>
