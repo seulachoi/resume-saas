@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
+// ✅ use the same enums as prompts/analyze
+import type { Track, Seniority } from "@/lib/prompts";
+
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
+const LS_TRACK_KEY = "resumeup_track";
+const LS_SENIORITY_KEY = "resumeup_seniority";
 
 // ✅ Lemon bundle default (Most popular = 5 credits)
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
@@ -19,6 +24,10 @@ type CheckoutRow = {
   jd_text?: string | null;
   result_json?: any | null;
   report_title?: string | null;
+
+  // ✅ NEW: stored context columns
+  target_track?: Track | string | null;
+  target_seniority?: Seniority | string | null;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -48,7 +57,6 @@ function PrimaryButton({
     "inline-flex items-center justify-center rounded-2xl px-6 py-3 text-sm font-semibold transition " +
     "focus:outline-none focus:ring-4 focus:ring-emerald-300/40";
 
-  // ✅ primary = dark (as you preferred earlier for View report), but still premium
   const cls = `${base} bg-slate-900 text-white hover:bg-slate-800 ${className}`;
 
   if (href) return <a href={href} className={cls}>{children}</a>;
@@ -69,7 +77,6 @@ function AccentButton({
   onClick?: () => void;
   className?: string;
 }) {
-  // ✅ Accent = emerald/teal (for “Analyze another role”)
   return (
     <button
       type="button"
@@ -150,6 +157,44 @@ function deriveTitle(row: CheckoutRow): string {
   return "ATS Optimization Report";
 }
 
+function prettyTrack(t?: string | null) {
+  const map: Record<string, string> = {
+    product_manager: "Product Manager",
+    strategy_bizops: "Strategy / BizOps",
+    data_analytics: "Data & Analytics",
+    engineering: "Software Engineering",
+    marketing_growth: "Marketing / Growth",
+    sales_bd: "Sales / Business Dev",
+    design_ux: "Design / UX",
+    operations_program: "Operations / Program",
+  };
+  return t ? (map[String(t)] ?? String(t)) : "General";
+}
+
+function prettySeniority(s?: string | null) {
+  const map: Record<string, string> = {
+    entry: "Entry",
+    mid: "Mid",
+    senior: "Senior",
+  };
+  return s ? (map[String(s)] ?? String(s)) : "Mid";
+}
+
+function Tag({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "purple" | "green" }) {
+  const cls =
+    tone === "purple"
+      ? "bg-indigo-50 border-indigo-200 text-indigo-900"
+      : tone === "green"
+      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+      : "bg-slate-50 border-slate-200 text-slate-800";
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${cls}`}>
+      {children}
+    </span>
+  );
+}
+
 export default function MyReportsPage() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<CheckoutRow[]>([]);
@@ -187,9 +232,12 @@ export default function MyReportsPage() {
 
       setCredits(Number(cRes.data?.balance ?? 0));
 
+      // ✅ include target_track/target_seniority
       const { data, error: listErr } = await supabase
         .from("checkout_sessions")
-        .select("id,status,created_at,ats_before,ats_after,resume_text,jd_text,result_json,report_title")
+        .select(
+          "id,status,created_at,ats_before,ats_after,resume_text,jd_text,result_json,report_title,target_track,target_seniority"
+        )
         .eq("user_id", u.id)
         .order("created_at", { ascending: false });
 
@@ -235,8 +283,25 @@ export default function MyReportsPage() {
 
   const reuseInputs = (r: CheckoutRow) => {
     try {
+      // 1) resume + jd
       if (r.resume_text) localStorage.setItem(LS_RESUME_KEY, r.resume_text);
       if (r.jd_text) localStorage.setItem(LS_JD_KEY, r.jd_text);
+  
+      // 2) track/seniority (prefer columns, fallback to result_json)
+      const ctxTrack =
+        (r.target_track as any) ||
+        r.result_json?.selectedContext?.track ||
+        "product_manager";
+  
+      const ctxSeniority =
+        (r.target_seniority as any) ||
+        r.result_json?.selectedContext?.seniority ||
+        "mid";
+  
+      localStorage.setItem(LS_TRACK_KEY, String(ctxTrack));
+      localStorage.setItem(LS_SENIORITY_KEY, String(ctxSeniority));
+  
+      // jump to analyzer
       window.location.href = "/#analyzer";
     } catch {
       window.location.href = "/#analyzer";
@@ -261,15 +326,11 @@ export default function MyReportsPage() {
         return;
       }
 
-      // You can pass minimal payload; checkout/create should accept variantId + userId.
       const res = await fetch("/api/checkout/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // optional; not required just to top up credits
-          resumeText: "",
-          jdText: "",
-          atsBefore: 0,
+          topupOnly: true,
           variantId: DEFAULT_TOPUP_VARIANT_ID,
           userId: uid,
         }),
@@ -342,7 +403,6 @@ export default function MyReportsPage() {
                       {credits ?? 0}
                     </div>
 
-                    {/* ✅ immediate top-up to Lemon checkout */}
                     <button
                       type="button"
                       onClick={topUpCreditsNow}
@@ -353,7 +413,7 @@ export default function MyReportsPage() {
                   </div>
 
                   <div className="text-sm text-white/75">
-                    Each full report uses <span className="font-semibold text-white">1 credit</span>. Full rewrite + after-score improvements.
+                    Each full report uses <span className="font-semibold text-white">1 credit</span>. Personalized rewrite + after-score improvements.
                   </div>
                 </div>
 
@@ -401,18 +461,29 @@ export default function MyReportsPage() {
                   const title = deriveTitle(r);
                   const subtitle = formatDate(r.created_at);
 
+                  // ✅ context from columns; fallback to result_json.selectedContext
+                  const ctx = r.target_track || r.result_json?.selectedContext?.track || null;
+                  const lvl = r.target_seniority || r.result_json?.selectedContext?.seniority || null;
+
                   return (
                     <div key={r.id} className="rounded-3xl border border-slate-200 bg-white p-6">
                       <div className="flex items-start justify-between gap-4 flex-wrap">
-                        {/* LEFT: title + date first */}
-                        <div className="space-y-1 min-w-[320px]">
+                        {/* LEFT: title + badges + date */}
+                        <div className="space-y-2 min-w-[360px]">
                           <div className="text-2xl font-semibold text-slate-900">
                             {title}
                           </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Tag tone="purple">{prettyTrack(String(ctx ?? ""))}</Tag>
+                            <Tag tone="green">{prettySeniority(String(lvl ?? ""))}</Tag>
+                            <Tag>Personalized</Tag>
+                          </div>
+
                           <div className="text-sm text-slate-600">{subtitle}</div>
 
-                          {/* ✅ score under title/date (left-aligned) */}
-                          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 inline-block">
+                          {/* Score */}
+                          <div className="mt-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 inline-block">
                             <div className="text-xs text-slate-500">Score</div>
                             {hasScores ? (
                               <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -435,7 +506,6 @@ export default function MyReportsPage() {
                             Reuse inputs
                           </SecondaryButton>
 
-                          {/* ✅ View report emphasized (primary) */}
                           <PrimaryButton href={`/results/${r.id}`} className="px-6 py-3">
                             View report
                           </PrimaryButton>

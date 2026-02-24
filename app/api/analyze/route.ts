@@ -16,7 +16,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 /** ---------- helpers ---------- */
 
 function clamp(n: number, min = 0, max = 100) {
-  return Math.max(min, Math.min(max, n));
+  return Math.max(min, Math.min(max, Number.isFinite(n) ? n : 0));
 }
 
 function wordCount(text: string) {
@@ -141,6 +141,29 @@ function isSeniority(x: any): x is Seniority {
   return ["entry", "mid", "senior"].includes(String(x));
 }
 
+function labelTrack(track: Track) {
+  const map: Record<Track, string> = {
+    product_manager: "Product Manager",
+    strategy_bizops: "Strategy / BizOps",
+    data_analytics: "Data & Analytics",
+    engineering: "Software Engineering",
+    marketing_growth: "Marketing / Growth",
+    sales_bd: "Sales / Business Development",
+    design_ux: "Design / UX",
+    operations_program: "Operations / Program",
+  };
+  return map[track] ?? "General";
+}
+
+function labelSeniority(s: Seniority) {
+  const map: Record<Seniority, string> = {
+    entry: "Entry-level",
+    mid: "Mid-level",
+    senior: "Senior-level",
+  };
+  return map[s] ?? "Mid-level";
+}
+
 /** ---------- handler ---------- */
 
 export async function POST(req: Request) {
@@ -167,7 +190,7 @@ export async function POST(req: Request) {
 
     const sb = supabaseServer();
 
-    // ✅ FULL mode: verify payment + load DB context (and optionally resume/jd from DB)
+    // ✅ FULL mode: verify payment + load DB context (DB wins) + prefer DB resume/jd
     if (mode === "full") {
       if (!sid) {
         return NextResponse.json({ error: "Missing sid for full mode" }, { status: 403 });
@@ -187,11 +210,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Payment not confirmed" }, { status: 403 });
       }
 
-      // ✅ DB context wins (this is the “recommended design”)
+      // DB context wins
       if (isTrack(session.target_track)) track = session.target_track;
       if (isSeniority(session.target_seniority)) seniority = session.target_seniority;
 
-      // ✅ prefer DB resume/jd if present (more reliable for regenerated reports)
+      // prefer DB resume/jd
       if (typeof session.resume_text === "string" && session.resume_text.length >= 200) {
         resumeText = session.resume_text;
       }
@@ -200,7 +223,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Validate inputs (now that full may have loaded from DB)
+    // Validate inputs
     if (resumeText.length < 200 || jdText.length < 200) {
       return NextResponse.json(
         { error: "resumeText and jdText must be at least 200 characters." },
@@ -277,11 +300,21 @@ export async function POST(req: Request) {
 
     const roleProfile = JSON.parse(roleResp.choices[0].message.content || "{}") as RoleProfile;
 
+    // ✅ Personalized UX copy (for UI to show)
+    const personalization = {
+      headline: `Personalized report for ${labelTrack(track)} · ${labelSeniority(seniority)}`,
+      subline:
+        "This report applied role-specific keyword weighting and seniority-adjusted impact expectations (no keyword stuffing, no invented metrics).",
+      trackLabel: labelTrack(track),
+      seniorityLabel: labelSeniority(seniority),
+    };
+
     // Preview: no rewrite
     if (mode === "preview") {
       return NextResponse.json({
         mode,
         selectedContext: { track, seniority },
+        personalization,
         overallBefore,
         subscoresBefore: {
           skills: skillsBefore,
@@ -326,7 +359,7 @@ export async function POST(req: Request) {
       (aSkills.rate * 2.0 + aTools.rate * 1.5 + aMetrics.rate * 2.0 + aSoft.rate * 1.0) /
       (2.0 + 1.5 + 2.0 + 1.0);
 
-    const atsAfter = Math.round(weightedAfter * 100);
+    const atsAfterRaw = Math.round(weightedAfter * 100);
 
     const improvements = {
       required_skills_added: gaps.required_skills.filter((k: string) =>
@@ -343,10 +376,29 @@ export async function POST(req: Request) {
       ),
     };
 
-    const skillsAfter = computeSkillsScoreByTrack(track, aSkills.rate, aTools.rate, aMetrics.rate);
-    const impactAfter = computeImpactScore(rewrittenResume, seniority);
-    const brevityAfter = computeBrevityScore(rewrittenResume);
-    const overallAfter = computeOverall(skillsAfter, impactAfter, brevityAfter);
+    const skillsAfterRaw = computeSkillsScoreByTrack(track, aSkills.rate, aTools.rate, aMetrics.rate);
+    const impactAfterRaw = computeImpactScore(rewrittenResume, seniority);
+    const brevityAfterRaw = computeBrevityScore(rewrittenResume);
+    const overallAfterRaw = computeOverall(skillsAfterRaw, impactAfterRaw, brevityAfterRaw);
+
+    // ✅ Safety: paid flow must never show after score lower than before
+    const overallAfter = Math.max(overallBefore, overallAfterRaw);
+    const atsAfter = Math.max(atsScore, atsAfterRaw);
+
+    // ✅ Score driver deltas for richer "What changed"
+    const scoreDrivers = {
+      deltas: {
+        skills: clamp(skillsAfterRaw) - clamp(skillsBefore),
+        impact: clamp(impactAfterRaw) - clamp(impactBefore),
+        brevity: clamp(brevityAfterRaw) - clamp(brevityBefore),
+        overall: clamp(overallAfter) - clamp(overallBefore),
+      },
+      narrative: [
+        `Skills score uses ${labelTrack(track)} keyword weighting.`,
+        `Impact expectations are calibrated to ${labelSeniority(seniority)} roles.`,
+        "Brevity reflects length and bullet readability.",
+      ],
+    };
 
     // --- persist to Supabase ---
     if (sid) {
@@ -357,6 +409,8 @@ export async function POST(req: Request) {
           ats_after: overallAfter,
           result_json: {
             selectedContext: { track, seniority },
+            personalization,
+            scoreDrivers,
             overall_before: overallBefore,
             overall_after: overallAfter,
             subscores_before: {
@@ -364,10 +418,11 @@ export async function POST(req: Request) {
               impact: impactBefore,
               brevity: brevityBefore,
             },
+            // store raw subscores (truth), overall is clamped for UX
             subscores_after: {
-              skills: skillsAfter,
-              impact: impactAfter,
-              brevity: brevityAfter,
+              skills: skillsAfterRaw,
+              impact: impactAfterRaw,
+              brevity: brevityAfterRaw,
             },
             extractedKeywords: extracted,
             gaps,
@@ -381,6 +436,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       mode,
       selectedContext: { track, seniority },
+      personalization,
+      scoreDrivers,
       atsScore,
       atsAfter,
       overallBefore,
@@ -391,9 +448,9 @@ export async function POST(req: Request) {
         brevity: brevityBefore,
       },
       subscoresAfter: {
-        skills: skillsAfter,
-        impact: impactAfter,
-        brevity: brevityAfter,
+        skills: skillsAfterRaw,
+        impact: impactAfterRaw,
+        brevity: brevityAfterRaw,
       },
       roleProfile,
       extractedKeywords: extracted,

@@ -8,6 +8,8 @@ import type { Track, Seniority } from "@/lib/prompts";
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_SID_KEY = "resumeup_sid";
+const LS_TRACK_KEY = "resumeup_track";
+const LS_SENIORITY_KEY = "resumeup_seniority";
 
 function PrimaryButton({
   children,
@@ -687,7 +689,20 @@ export default function HomePage() {
       const j = localStorage.getItem(LS_JD_KEY) || "";
       if (r) setResumeText(r);
       if (j) setJdText(j);
-    } catch { }
+  
+      // ✅ restore role context
+      const t = localStorage.getItem(LS_TRACK_KEY);
+      const s = localStorage.getItem(LS_SENIORITY_KEY);
+  
+      if (t && TRACKS.some((x) => x.key === t)) {
+        setTrack(t as any);
+      }
+      if (s && SENIORITIES.some((x) => x.key === s)) {
+        setSeniority(s as any);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   // persist input
@@ -1204,6 +1219,7 @@ export default function HomePage() {
             Paste your resume + job description. Get a detailed free preview (score + checklist + keyword gaps),
             then generate a full recruiter-grade report.
           </p>
+          
         </div>
 
 
@@ -1211,14 +1227,14 @@ export default function HomePage() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
+              {/* <div>
                 <div className="text-sm font-semibold text-slate-900">Target role context</div>
                 <div className="text-xs text-slate-500 mt-1">
                   Optional but recommended — improves scoring and rewrite precision.
                 </div>
-              </div>
+              </div> */}
 
-              <button
+              {/* <button
                 type="button"
                 onClick={() => {
                   setTrack("product_manager");
@@ -1227,11 +1243,11 @@ export default function HomePage() {
                 className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline underline-offset-4"
               >
                 Reset
-              </button>
+              </button> */}
             </div>
 
             <div className="mt-4">
-              <div className="text-xs font-semibold text-slate-500 mb-2">Role track</div>
+              <div className="text-s font-semibold text-slate-500 mb-2">Role track</div>
               <div className="flex flex-wrap gap-2">
                 {TRACKS.map((t) => {
                   const active = t.key === track;
@@ -1255,7 +1271,7 @@ export default function HomePage() {
             </div>
 
             <div className="mt-4">
-              <div className="text-xs font-semibold text-slate-500 mb-2">Seniority</div>
+              <div className="text-s font-semibold text-slate-500 mb-2">Seniority</div>
               <div className="flex flex-wrap gap-2">
                 {SENIORITIES.map((s) => {
                   const active = s.key === seniority;
@@ -1278,7 +1294,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="mt-4 text-xs text-slate-500">
+            <div className="mt-4 text-s text-slate-500">
               We’ll tailor keyword expectations, impact thresholds, and rewrite style to your selection.
             </div>
           </div>
