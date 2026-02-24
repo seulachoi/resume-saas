@@ -2,40 +2,50 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 function inferReportTitle(jdText: string) {
-    const lines = String(jdText || "")
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  
-    const first = lines[0] || "Resume report";
-  
-    // 너무 일반적인 첫줄이면 다음줄 사용 시도
-    const generic = ["about", "company", "overview", "job description"];
-    const isGeneric =
-      generic.some((g) => first.toLowerCase().startsWith(g));
-  
-    const candidate = isGeneric ? (lines[1] || first) : first;
-  
-    return candidate.slice(0, 60);
-  }
+  const lines = String(jdText || "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const first = lines[0] || "ATS Optimization Report";
+
+  const generic = ["about", "company", "overview", "job description"];
+  const isGeneric = generic.some((g) => first.toLowerCase().startsWith(g));
+
+  const candidate = isGeneric ? (lines[1] || first) : first;
+  return candidate.slice(0, 60);
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
     const resumeText = String(body?.resumeText ?? "");
     const jdText = String(body?.jdText ?? "");
     const atsBefore = Number(body?.atsBefore ?? 0);
     const variantId = String(body?.variantId ?? "");
-    const userId = body?.userId ?? null;
-    if (resumeText.length < 200 || jdText.length < 200) {
-      return NextResponse.json(
-        { error: "resumeText and jdText must be at least 200 characters." },
-        { status: 400 }
-      );
+    const userId = String(body?.userId ?? "");
+
+    // ✅ top-up only mode:
+    // - explicit flag OR empty resume/jd from My Results
+    const topupOnly = Boolean(body?.topupOnly) || (resumeText.length === 0 && jdText.length === 0);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
     }
 
     if (!variantId) {
       return NextResponse.json({ error: "Missing variantId" }, { status: 400 });
+    }
+
+    // ✅ Only require resume/jd for "analysis checkout" flow
+    if (!topupOnly) {
+      if (resumeText.length < 200 || jdText.length < 200) {
+        return NextResponse.json(
+          { error: "resumeText and jdText must be at least 200 characters." },
+          { status: 400 }
+        );
+      }
     }
 
     const creditsMap: Record<string, number> = {
@@ -47,18 +57,22 @@ export async function POST(req: Request) {
 
     const sb = supabaseServer();
 
-    // insert and get sid (id default gen_random_uuid() should be set)
+    // ✅ For top-up-only, store minimal fields (no resume/jd)
+    const reportTitle = topupOnly
+      ? `Credit top-up (${credits} credits)`
+      : inferReportTitle(jdText);
+
+    // status should NOT be "paid" before payment
     const { data: row, error: insErr } = await sb
       .from("checkout_sessions")
       .insert({
         user_id: userId,
-        status: "paid",
-        resume_text: resumeText,
-        jd_text: jdText,
-        ats_before: atsBefore,
+        status: "created",
+        resume_text: topupOnly ? null : resumeText,
+        jd_text: topupOnly ? null : jdText,
+        ats_before: topupOnly ? 0 : atsBefore,
         credits,
-        report_title: inferReportTitle(jdText),
-    
+        report_title: reportTitle,
       })
       .select("id")
       .single();
@@ -72,9 +86,8 @@ export async function POST(req: Request) {
 
     const sid = String(row.id);
 
-    const redirectUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/success?sid=${encodeURIComponent(
-      sid
-    )}`;
+    // Redirect back to your app after payment
+    const redirectUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/success?sid=${encodeURIComponent(sid)}`;
 
     const lemonRes = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
       method: "POST",
