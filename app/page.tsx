@@ -117,6 +117,8 @@ function AnimatedRing({
   const c = 2 * Math.PI * r;
   const dashOffset = c - (p / 100) * c;
 
+
+
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg
@@ -544,6 +546,585 @@ export default function HomePage() {
 
   };
 
+  const DEFAULT_TOPUP_VARIANT_ID = "1332796";
+
+  const topUpCreditsNow = async (variantId: string = DEFAULT_TOPUP_VARIANT_ID) => {
+    setError(null);
+
+    // 로그인 안되어있으면 로그인 먼저
+    if (!userEmail) {
+      try {
+        localStorage.setItem("resumeup_post_login_topup_variant", variantId);
+      } catch { }
+      await signInWithGoogle();
+      return;
+    }
+
+    try {
+      const supabase = supabaseBrowser();
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id ?? null;
+
+      if (!uid) {
+        setError("Please sign in to purchase credits.");
+        return;
+      }
+
+      localStorage.setItem(
+        "resumeup_last_purchase_credits",
+        String(creditsByVariant[variantId] ?? 1)
+      );
+      localStorage.setItem(
+        "resumeup_last_purchase_ts",
+        String(Date.now())
+      );
+
+      const res = await fetch("/api/checkout/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topupOnly: true,
+          variantId,
+          userId: uid,
+          resumeText: "",
+          jdText: "",
+          atsBefore: 0,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Checkout creation failed");
+
+      window.location.href = data.checkoutUrl;
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to start checkout");
+    }
+  };
+
+
+  function PrimaryButton({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900"
+      >
+        {children}
+      </button>
+    );
+  }
+
+  function useInViewOnce<T extends Element>(threshold = 0.25) {
+    const [seen, setSeen] = useState(false);
+    const ref = useState<React.RefObject<T>>(() => ({ current: null } as any))[0];
+
+    useEffect(() => {
+      if (seen) return;
+      const el = ref.current;
+      if (!el) return;
+
+      const io = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            setSeen(true);
+            io.disconnect();
+          }
+        },
+        { threshold }
+      );
+
+      io.observe(el);
+      return () => io.disconnect();
+    }, [seen, threshold, ref]);
+
+    return { ref, seen };
+  }
+
+  function ScoreRing({ value }: { value: number }) {
+    const v = Math.max(0, Math.min(100, value || 0));
+    return (
+      <div
+        className="h-16 w-16 rounded-full"
+        style={{
+          background: `conic-gradient(#0f172a ${v * 3.6}deg, #e2e8f0 0deg)`,
+        }}
+      >
+        <div className="h-full w-full p-2">
+          <div className="h-full w-full rounded-full bg-white flex items-center justify-center">
+            <div className="text-sm font-semibold text-slate-900">{v}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function AnimatedRing({
+    value,
+    size = 96,
+    duration = 800,
+    start = true,
+  }: {
+    value: number;
+    size?: number;
+    duration?: number;
+    start?: boolean;
+  }) {
+    const v = Math.max(0, Math.min(100, value || 0));
+    const [p, setP] = useState(0);
+
+    useEffect(() => {
+      if (!start) {
+        setP(0);
+        return;
+      }
+
+      let raf = 0;
+      const from = 0;
+      setP(from);
+
+      const startAt = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - startAt) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setP(Math.round(eased * v));
+        if (t < 1) raf = requestAnimationFrame(tick);
+      };
+
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }, [v, duration, start]);
+
+    const stroke = 12;
+    const r = 44;
+    const c = 2 * Math.PI * r;
+    const dashOffset = c - (p / 100) * c;
+
+    return (
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg
+          viewBox="0 0 120 120"
+          className="-rotate-90"
+          style={{ width: size, height: size }}
+        >
+          <circle cx="60" cy="60" r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke} />
+          <circle
+            cx="60"
+            cy="60"
+            r={r}
+            fill="none"
+            stroke="url(#ringGradient)"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={dashOffset}
+            style={{ transition: "stroke-dashoffset 40ms linear" }}
+          />
+          <defs>
+            <linearGradient id="ringGradient" x1="0" y1="0" x2="120" y2="120">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="100%" stopColor="#34d399" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-3xl font-semibold text-slate-900">{value}</div>
+        </div>
+      </div>
+    );
+  }
+
+  function AnimatedBar({
+    value,
+    tone = "after",
+    duration = 700,
+    start = true
+  }: {
+    value: number;          // 0~100
+    tone?: "before" | "after";
+    duration?: number;
+    start?: boolean;
+  }) {
+    const v = Math.max(0, Math.min(100, value || 0));
+    const [w, setW] = useState(0);
+
+    useEffect(() => {
+      if (!start) {
+        setW(0);
+        return;
+      }
+      const t = setTimeout(() => setW(v), 30);
+      return () => clearTimeout(t);
+    }, [v, start]);
+
+    const color = tone === "after" ? "bg-emerald-500" : "bg-slate-300";
+
+    return (
+      <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
+        <div
+          className={`h-2 ${color}`}
+          style={{ width: `${w}%`, transition: `width ${duration}ms ease-out` }}
+        />
+      </div>
+    );
+  }
+
+  function WhyResumeUpSection() {
+    const s = useInViewOnce<HTMLDivElement>(0.25);
+
+    // 애니메이션 트리거: 섹션이 화면에 들어올 때만 실행
+    const start = s.seen;
+
+    // Keyword chips 애니메이션(빨강→초록)
+    const [kwOn, setKwOn] = useState(false);
+    useEffect(() => {
+      if (!start) return;
+      const t = setTimeout(() => setKwOn(true), 700);
+      return () => clearTimeout(t);
+    }, [start]);
+
+    // Credit progress 애니메이션 (0→5)
+    const [creditProg, setCreditProg] = useState(0);
+    useEffect(() => {
+      if (!start) return;
+      setCreditProg(0);
+      let i = 0;
+      const interval = setInterval(() => {
+        i += 1;
+        setCreditProg(i);
+        if (i >= 5) clearInterval(interval);
+      }, 220);
+      return () => clearInterval(interval);
+    }, [start]);
+
+    return (
+      <section ref={s.ref} className="bg-slate-50 py-20">
+        <div className="mx-auto max-w-6xl px-6 space-y-12">
+          <div className="text-center space-y-3">
+            <h2 className="text-4xl font-semibold text-slate-900">Why ResumeUp?</h2>
+            <p className="text-slate-600 max-w-2xl mx-auto">
+              Not just “feedback.” A visual, score-first report you can act on — then generate a recruiter-grade rewrite.
+            </p>
+          </div>
+
+          {/* 1) BEFORE vs AFTER */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 overflow-hidden relative">
+            <div className="pointer-events-none absolute -top-16 -left-16 h-48 w-48 rounded-full bg-emerald-200/40 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-indigo-200/40 blur-3xl" />
+
+            <div className="flex items-end justify-between flex-wrap gap-4">
+              <div className="space-y-1">
+                <div className="text-sm text-slate-500 font-semibold">Score-first clarity</div>
+                <div className="text-2xl font-semibold text-slate-900">
+                  See exactly what changed (before → after)
+                </div>
+                <div className="text-sm text-slate-600">
+                  Score + keyword gaps + concrete fixes — then a full rewrite and after-score report.
+                </div>
+              </div>
+
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                Preview first, upgrade when ready
+              </span>
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* BEFORE card */}
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-slate-900">Before</div>
+                  <span className="text-xs text-slate-500">sample</span>
+                </div>
+
+                <div className="mt-5 flex items-center gap-4">
+                  {/* static ring for before */}
+                  <div className="relative h-20 w-20">
+                    <svg viewBox="0 0 120 120" className="h-20 w-20 -rotate-90">
+                      <circle cx="60" cy="60" r="46" fill="none" stroke="#e2e8f0" strokeWidth="12" />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="46"
+                        fill="none"
+                        stroke="#94a3b8"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 46 * 0.52} ${2 * Math.PI * 46}`}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-xl font-semibold text-slate-900">52</div>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-slate-600 space-y-1">
+                    <div>Skills: 55</div>
+                    <div>Impact: 48</div>
+                    <div>Brevity: 62</div>
+                  </div>
+                </div>
+
+                <div className="mt-5 text-xs text-slate-500">Missing keywords</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {["Cross-functional", "SaaS", "Revenue tooling", "Experimentation"].map((k) => (
+                    <span key={k} className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-5 text-xs text-slate-500">Typical issues</div>
+                <ul className="mt-2 text-sm text-slate-700 list-disc pl-5 space-y-1">
+                  <li>Vague bullets without measurable outcomes</li>
+                  <li>Keyword gaps vs job description</li>
+                  <li>Long paragraphs (low scannability)</li>
+                </ul>
+              </div>
+
+              {/* AFTER card */}
+              <div className="rounded-3xl border border-slate-900 bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">After</div>
+                  <span className="text-xs text-white/70">sample</span>
+                </div>
+
+                <div className="mt-5 flex items-center gap-4">
+                  {/* animated ring after */}
+                  <div className="bg-white rounded-2xl p-2">
+                    <AnimatedRing value={82} size={80} start={start} />
+                  </div>
+
+                  <div className="text-sm text-white/80 space-y-1">
+                    <div>Skills: <span className="font-semibold text-white">84</span></div>
+                    <div>Impact: <span className="font-semibold text-white">80</span></div>
+                    <div>Brevity: <span className="font-semibold text-white">78</span></div>
+                  </div>
+                </div>
+
+                <div className="mt-6 text-xs text-white/70">Before → After</div>
+                <div className="mt-3 space-y-3">
+                  {[
+                    ["Overall", 52, 82],
+                    ["Skills", 55, 84],
+                    ["Impact", 48, 80],
+                  ].map(([label, b, a]) => (
+                    <div key={String(label)} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-white/70">
+                        <span>{label}</span>
+                        <span>
+                          {b} → <span className="font-semibold text-white">{a}</span>
+                        </span>
+                      </div>
+                      <div className="opacity-70">
+                        <AnimatedBar value={Number(b)} tone="before" start={start} />
+                      </div>
+                      <AnimatedBar value={Number(a)} tone="after" start={start} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-emerald-400 px-3 py-1 text-xs font-semibold text-slate-950">
+                    Recruiter-grade rewrite
+                  </span>
+                  <span className="text-xs text-white/70">Saved to My Reports</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2) Keyword intelligence (chips animate) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-8">
+              <div className="text-sm text-slate-500 font-semibold">Keyword intelligence</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-900">
+                Fill gaps naturally (no stuffing)
+              </div>
+              <div className="mt-2 text-slate-600">
+                We extract required skills, tools, and metric keywords from the job description — then integrate them naturally.
+              </div>
+
+              <div className="mt-6 text-sm font-semibold text-slate-900">Example: missing → added</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["Cross-functional", "SaaS", "Revenue tooling", "Stakeholders", "Experimentation"].map((k) => (
+                  <span
+                    key={k}
+                    className={[
+                      "rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-700",
+                      kwOn ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800",
+                    ].join(" ")}
+                  >
+                    {kwOn ? `✓ ${k}` : `✕ ${k}`}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-6 text-xs text-slate-500">
+                We never invent metrics. If unknown, we keep a TODO placeholder.
+              </div>
+            </div>
+
+            {/* 3) AI rewrite preview */}
+            <div className="rounded-3xl border border-slate-200 bg-white p-8">
+              <div className="text-sm text-slate-500 font-semibold">AI rewrite preview</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-900">
+                Strong bullets recruiters can scan
+              </div>
+              <div className="mt-2 text-slate-600">
+                We rewrite your experience into a clean ATS format with action verbs + structured impact.
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500 font-semibold">Before</div>
+                  <div className="mt-2 text-sm text-slate-700">
+                    Built a web app and supported cross-functional stakeholders.
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="text-xs text-emerald-700 font-semibold">After</div>
+                  <div className="mt-2 text-sm text-slate-900">
+                    Led cross-functional roadmap execution across product, engineering, and finance, improving conversion by{" "}
+                    <span className="font-semibold">+12%</span> (TODO: confirm metric).
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-emerald-600">
+                {/* <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                AI
+              </span> */}
+                <span>
+                  AI restructures bullets using action verbs + measurable impact formatting.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4) Credit reuse visualization */}
+          {/* <div className="rounded-3xl border border-slate-200 bg-white p-8">
+          <div className="flex items-end justify-between flex-wrap gap-4">
+            <div>
+              <div className="text-sm text-slate-500 font-semibold">Reusable credit system</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-900">
+                Buy once, apply to multiple roles
+              </div>
+              <div className="mt-2 text-slate-600">
+                Most candidates apply to 5+ jobs. Credits let you generate full reports repeatedly without repurchasing.
+              </div>
+            </div>
+
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+              Example: 5 credits
+            </span>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, idx) => {
+              const done = creditProg >= idx + 1;
+              return (
+                <div
+                  key={idx}
+                  className={[
+                    "rounded-2xl border p-4 text-center transition-all duration-500",
+                    done ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200",
+                  ].join(" ")}
+                >
+                  <div className="text-xs text-slate-500">Role {idx + 1}</div>
+                  <div className="mt-2 text-sm font-semibold">
+                    {done ? "✓ Full report" : "Pending"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-6">
+            <div className="text-xs text-slate-500">Credits usage</div>
+            <div className="mt-2 h-2 w-full rounded bg-slate-100 overflow-hidden">
+              <div
+                className="h-2 bg-emerald-500"
+                style={{ width: `${(creditProg / 5) * 100}%`, transition: "width 600ms ease-out" }}
+              />
+            </div>
+          </div>
+        </div> */}
+
+          {/* CTA */}
+          <div className="flex flex-col items-center pt-6 space-y-4">
+            <a
+              href="#analyzer"
+              className="
+      group
+      inline-flex items-center justify-center
+      rounded-3xl
+      px-14 py-5
+      text-lg font-semibold
+      text-white
+      bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500
+      hover:from-indigo-500 hover:via-purple-500 hover:to-emerald-400
+      shadow-2xl shadow-purple-500/30
+      transition-all duration-300
+      hover:scale-105
+    "
+            >
+              See your score now
+              <span className="ml-3 transition-transform duration-300 group-hover:translate-x-1">
+                →
+              </span>
+            </a>
+
+            <div className="text-sm text-slate-500">
+              Free ATS preview · No credit required
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const TRACKS: { key: Track; label: string }[] = [
+    { key: "product_manager", label: "Product Manager" },
+    { key: "strategy_bizops", label: "Strategy / BizOps" },
+    { key: "data_analytics", label: "Data & Analytics" },
+    { key: "engineering", label: "Software Engineering" },
+    { key: "marketing_growth", label: "Marketing / Growth" },
+    { key: "sales_bd", label: "Sales / Business Dev" },
+    { key: "design_ux", label: "Design / UX" },
+    { key: "operations_program", label: "Operations / Program" },
+  ];
+
+  const SENIORITIES: { key: Seniority; label: string }[] = [
+    { key: "entry", label: "Entry (0–2y)" },
+    { key: "mid", label: "Mid (3–6y)" },
+    { key: "senior", label: "Senior (7y+)" },
+  ];
+
+
+  const handleUnlockClick = async () => {
+    setError(null);
+
+    // 1) 로그인 안 되어있으면 -> 로그인부터
+    if (!userEmail) {
+      await signInWithGoogle();
+      return;
+    }
+
+    // 2) 로그인 되어있으면 -> 결제 모달 열기 (bundle 선택)
+    setModalReason("insufficient");
+    setShowBundleModal(true);
+  };
+
 
   const generateFullWithCredit = async () => {
     setError(null);
@@ -689,11 +1270,11 @@ export default function HomePage() {
       const j = localStorage.getItem(LS_JD_KEY) || "";
       if (r) setResumeText(r);
       if (j) setJdText(j);
-  
+
       // ✅ restore role context
       const t = localStorage.getItem(LS_TRACK_KEY);
       const s = localStorage.getItem(LS_SENIORITY_KEY);
-  
+
       if (t && TRACKS.some((x) => x.key === t)) {
         setTrack(t as any);
       }
@@ -826,12 +1407,7 @@ export default function HomePage() {
           </a>
 
           <div className="flex items-center gap-3">
-            <a className="text-sm text-slate-600 hover:text-slate-900" href="#pricing">
-              Pricing
-            </a>
-            <a className="text-sm text-slate-600 hover:text-slate-900" href="/terms">
-              Terms
-            </a>
+
 
             {userEmail ? (
               <div className="flex items-center gap-2">
@@ -1219,7 +1795,7 @@ export default function HomePage() {
             Paste your resume + job description. Get a detailed free preview (score + checklist + keyword gaps),
             then generate a full recruiter-grade report.
           </p>
-          
+
         </div>
 
 
@@ -1541,10 +2117,7 @@ export default function HomePage() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        setModalReason("insufficient");
-                        setShowBundleModal(true);
-                      }}
+                      onClick={handleUnlockClick}
                       className="rounded-2xl px-10 py-4 text-base font-semibold text-slate-950
            bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
            shadow-xl shadow-emerald-500/25 transition
@@ -1643,7 +2216,7 @@ export default function HomePage() {
                 <div
                   key={plan.id}
                   className={[
-                    "relative rounded-3xl p-8 transition-all",
+                    "relative rounded-3xl p-8 transition-all flex flex-col",
                     "border bg-white/10 border-white/20",
                     "hover:-translate-y-1 hover:bg-white/15",
                     isPopular ? "border-emerald-400 shadow-2xl shadow-emerald-500/20 scale-105" : "",
@@ -1680,10 +2253,10 @@ export default function HomePage() {
                   </div>
 
                   {/* CTA button */}
-                  <div className="mt-6">
+                  <div className="mt-auto pt-6">
                     <button
                       type="button"
-                      onClick={() => unlock(plan.id)}
+                      onClick={() => topUpCreditsNow(plan.id)}
                       className={[
                         "w-full rounded-2xl px-6 py-4 text-base font-semibold transition",
                         isPopular

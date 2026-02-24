@@ -144,8 +144,7 @@ export default function SuccessPage() {
         )}
 
         <div className="text-xs text-slate-500">
-          If you purchased credits only, you’ll be redirected to <b>My Results</b>.
-          If you purchased a report, you’ll be redirected to the generated report page.
+          You’ll be redirected to the generated report page.
         </div>
       </div>
     </main>
