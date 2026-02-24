@@ -101,10 +101,8 @@ function CreditPill({ credits }: { credits: number }) {
 }
 
 function deriveTitle(row: CheckoutRow): string {
-  // ✅ JD 기반 저장된 타이틀 우선
   if (row.report_title && row.report_title.trim()) return row.report_title.trim();
 
-  // fallback: roleProfile에서 추정 (있으면)
   const r = row.result_json || {};
   const rp =
     r.roleProfile ||
@@ -118,7 +116,6 @@ function deriveTitle(row: CheckoutRow): string {
 
   if (primaryRole) return String(primaryRole);
 
-  // 최종 fallback: 모호한 "Resume report" 대신 더 명확한 이름
   return "ATS Optimization Report";
 }
 
@@ -215,9 +212,10 @@ export default function MyReportsPage() {
     }
   };
 
+  // ✅ FIX: Top up should go to pricing (bundle selection) not analyzer
   const buyCredits = () => {
-    // 홈에서 buy=1을 감지해 번들 모달 열도록 구현되어 있음
-    window.location.href = "/?buy=1&reason=insufficient#analyzer";
+    // If your home opens bundle modal via ?buy=1, keep it; just change hash to #pricing
+    window.location.href = "/?buy=1&reason=insufficient#pricing";
   };
 
   const goAnalyzer = () => {
@@ -226,10 +224,9 @@ export default function MyReportsPage() {
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
-      {/* Header: minimal + brand-consistent */}
+      {/* Header: minimal */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-          {/* Logo -> Home */}
           <a href="/" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-slate-900" />
             <div className="font-semibold text-slate-900">ResumeUp</div>
@@ -238,7 +235,7 @@ export default function MyReportsPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {userId && credits !== null && <CreditPill credits={credits} />}
             <SecondaryButton href="/my-reports" className="border-slate-900 text-slate-900">
-              Resume Results
+              My Results
             </SecondaryButton>
             {userId ? (
               <SecondaryButton onClick={signOut}>Sign out</SecondaryButton>
@@ -254,13 +251,12 @@ export default function MyReportsPage() {
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-8">
         {/* Page title */}
         <div>
-          <h1 className="text-5xl font-semibold">Resume Results</h1>
+          <h1 className="text-5xl font-semibold">My Results</h1>
           <p className="text-sm text-slate-600 mt-1">
             {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
           </p>
         </div>
 
-        {/* Not signed in */}
         {!userId && (
           <div className="rounded-3xl border border-slate-200 bg-white p-8">
             <div className="text-xl font-semibold">Sign in to see your saved results</div>
@@ -273,10 +269,9 @@ export default function MyReportsPage() {
           </div>
         )}
 
-        {/* Signed in */}
         {userId && (
           <>
-            {/* Credits hero card: Top-up link near number */}
+            {/* Credits hero card */}
             <div className="rounded-3xl border border-slate-200 overflow-hidden">
               <div className="bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-8 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-8">
                 <div className="space-y-2">
@@ -287,7 +282,7 @@ export default function MyReportsPage() {
                       {credits ?? 0}
                     </div>
 
-                    {/* ✅ Top up link placed here */}
+                    {/* Top up link next to number */}
                     <button
                       type="button"
                       onClick={buyCredits}
@@ -298,12 +293,13 @@ export default function MyReportsPage() {
                   </div>
 
                   <div className="text-sm text-white/75">
-                    Each full report uses <span className="font-semibold text-white">1 credit</span>. Full rewrite + after-score improvements.
+                    Each full report uses <span className="font-semibold text-white">1 credit</span>.
+                    Full rewrite + after-score improvements.
                   </div>
                 </div>
 
-                {/* Primary action: new analysis */}
-                <div className="flex items-center gap-3 flex-wrap">
+                {/* Primary action */}
+                <div className="flex flex-col items-start gap-2">
                   <button
                     type="button"
                     onClick={goAnalyzer}
@@ -311,8 +307,13 @@ export default function MyReportsPage() {
                                bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
                                shadow-xl shadow-emerald-500/25 transition hover:scale-[1.02] active:scale-[0.99]"
                   >
-                    Analyze another role (use 1 credit)
+                    Analyze another role
                   </button>
+
+                  {/* ✅ outside the button */}
+                  <div className="text-xs text-white/70">
+                    Uses 1 credit per full report
+                  </div>
                 </div>
               </div>
             </div>
@@ -329,7 +330,6 @@ export default function MyReportsPage() {
               </div>
             )}
 
-            {/* Empty state (completed only) */}
             {!loading && completedRows.length === 0 && (
               <div className="rounded-3xl border border-slate-200 bg-white p-8">
                 <div className="text-xl font-semibold">No completed results yet</div>
@@ -342,7 +342,7 @@ export default function MyReportsPage() {
               </div>
             )}
 
-            {/* Completed report cards */}
+            {/* ✅ Card layout: title/date first (left) -> score -> actions */}
             {!loading && completedRows.length > 0 && (
               <div className="grid grid-cols-1 gap-4">
                 {completedRows.map((r) => {
@@ -355,52 +355,44 @@ export default function MyReportsPage() {
                   const subtitle = formatDate(r.created_at);
 
                   return (
-                    <div
-                      key={r.id}
-                      className="rounded-3xl border border-slate-200 bg-white p-6"
-                    >
+                    <div key={r.id} className="rounded-3xl border border-slate-200 bg-white p-6">
                       <div className="flex items-start justify-between gap-4 flex-wrap">
-                        {/* Left: score uplift block (strong reward) */}
-                        <div className="flex items-center gap-5">
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 min-w-[200px]">
-                            <div className="text-xs text-slate-500">Score</div>
-                            {hasScores ? (
-                              <div className="mt-1 text-base font-semibold text-slate-900">
-                                {clamp(before!)} → {clamp(after!)}{" "}
-                                <span className={delta! >= 0 ? "text-emerald-700" : "text-rose-700"}>
-                                  ({delta! >= 0 ? "+" : ""}{delta} pts)
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="mt-1 text-base font-semibold text-slate-900">
-                                {before !== null ? clamp(before) : "—"} → —
-                              </div>
-                            )}
+                        {/* LEFT: title + date first */}
+                        <div className="space-y-1 min-w-[280px]">
+                          <div className="text-2xl font-semibold text-slate-900">
+                            {title}
                           </div>
-
-                          {/* Middle: title + date */}
-                          <div className="space-y-1">
-                            <div className="text-2xl font-semibold text-slate-900">
-                              {title}
-                            </div>
-                            <div className="text-sm text-slate-600">
-                              {subtitle}
-                            </div>
-                          </div>
+                          <div className="text-sm text-slate-600">{subtitle}</div>
                         </div>
 
-                        {/* Right: actions */}
+                        {/* MIDDLE: score */}
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 min-w-[220px]">
+                          <div className="text-xs text-slate-500">Score</div>
+                          {hasScores ? (
+                            <div className="mt-1 text-base font-semibold text-slate-900">
+                              {clamp(before!)} → {clamp(after!)}{" "}
+                              <span className={delta! >= 0 ? "text-emerald-700" : "text-rose-700"}>
+                                ({delta! >= 0 ? "+" : ""}{delta} pts)
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-base font-semibold text-slate-900">
+                              {before !== null ? clamp(before) : "—"} → —
+                            </div>
+                          )}
+                        </div>
+
+                        {/* RIGHT: actions */}
                         <div className="flex items-center gap-3 flex-wrap">
                           <SecondaryButton onClick={() => reuseInputs(r)}>
                             Reuse inputs
                           </SecondaryButton>
-                          <PrimaryButton href={`/results/${r.id}`} className="px-6 py-3">
+                          <SecondaryButton href={`/results/${r.id}`} className="border-slate-900">
                             View report
-                          </PrimaryButton>
+                          </SecondaryButton>
                         </div>
                       </div>
 
-                      {/* Optional hint if inputs missing */}
                       {(!r.resume_text || !r.jd_text) && (
                         <div className="mt-4 text-xs text-slate-500">
                           Note: This report doesn’t have stored inputs for quick reuse.
