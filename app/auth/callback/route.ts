@@ -15,6 +15,9 @@ export async function GET(req: Request) {
   // ✅ Next.js 16: cookies() is async
   const cookieStore = await cookies();
 
+  // ✅ Response 객체를 먼저 생성
+  const response = NextResponse.redirect(new URL(next, url.origin));
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,23 +27,25 @@ export async function GET(req: Request) {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
+          // ✅ Response 객체에 쿠키 설정
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
+            response.cookies.set(name, value, options);
           });
         },
       },
     }
   );
 
-  // ✅ THIS is the missing piece
+  // ✅ 코드를 세션으로 교환
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    console.error("Auth callback error:", error);
     return NextResponse.redirect(
       new URL(`/auth/error?msg=${encodeURIComponent(error.message)}`, url.origin)
     );
   }
 
-  // ✅ Redirect back to where you wanted to go
-  return NextResponse.redirect(new URL(next, url.origin));
+  // ✅ 쿠키가 설정된 response 반환
+  return response;
 }
