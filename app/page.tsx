@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import type { Track, Seniority } from "@/lib/prompts";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 /** ===================== LocalStorage Keys ===================== */
 const LS_RESUME_KEY = "resumeup_resumeText";
@@ -401,6 +402,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
 
   const [track, setTrack] = useState<Track>("product_manager");
@@ -445,47 +447,56 @@ export default function HomePage() {
   const topUpCreditsNow = async (variantId: string = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
 
-    if (!userEmail) {
+    const supabase = supabaseBrowser();
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id ?? null;
+
+    // 1) 비로그인: 로그인 먼저 → 로그인 후 바로 결제 이어가기
+    if (!uid) {
       try {
         localStorage.setItem("resumeup_post_login_topup_variant", variantId);
-      } catch {}
+      } catch { }
       await signInWithGoogle();
       return;
     }
 
+    // 2) create route가 200자 검증을 걸고 있으니, top-up이라도 더미 텍스트로 통과
+    const dummy = "Top-up only. ".repeat(30); // 약 360자
+    const safeResume = resumeText && resumeText.length >= 200 ? resumeText : dummy;
+    const safeJd = jdText && jdText.length >= 200 ? jdText : dummy;
+
+    // toast after redirect
     try {
-      const supabase = supabaseBrowser();
-      const { data: userData } = await supabase.auth.getUser();
-      const uid = userData.user?.id ?? null;
-
-      if (!uid) {
-        setError("Please sign in to purchase credits.");
-        return;
-      }
-
-      // toast after redirect
+      const creditsByVariant: Record<string, number> = {
+        "1320252": 1,
+        "1332796": 5,
+        "1332798": 10,
+      };
       localStorage.setItem("resumeup_last_purchase_credits", String(creditsByVariant[variantId] ?? 1));
       localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
+    } catch { }
 
+    try {
       const res = await fetch("/api/checkout/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          topupOnly: true,
+          resumeText: safeResume,
+          jdText: safeJd,
+          atsBefore: result?.atsScore ?? 0,
           variantId,
           userId: uid,
-          resumeText: "",
-          jdText: "",
-          atsBefore: 0,
           track,
           seniority,
+          topupOnly: true, // create route에서 무시해도 OK
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Checkout creation failed");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Checkout creation failed");
 
-      window.location.href = data.checkoutUrl;
+      // ✅ 무조건 레몬 체크아웃으로 이동
+      window.location.href = json.checkoutUrl;
     } catch (e: any) {
       setError(e?.message ?? "Failed to start checkout");
     }
@@ -573,7 +584,7 @@ export default function HomePage() {
       const s = localStorage.getItem(LS_SENIORITY_KEY);
       if (t && TRACKS.some((x) => x.key === (t as any))) setTrack(t as any);
       if (s && SENIORITIES.some((x) => x.key === (s as any))) setSeniority(s as any);
-    } catch {}
+    } catch { }
   }, []);
 
   // persist inputs
@@ -581,7 +592,7 @@ export default function HomePage() {
     try {
       localStorage.setItem(LS_RESUME_KEY, resumeText);
       localStorage.setItem(LS_JD_KEY, jdText);
-    } catch {}
+    } catch { }
   }, [resumeText, jdText]);
 
   // persist context
@@ -589,31 +600,37 @@ export default function HomePage() {
     try {
       localStorage.setItem(LS_TRACK_KEY, track);
       localStorage.setItem(LS_SENIORITY_KEY, seniority);
-    } catch {}
+    } catch { }
   }, [track, seniority]);
 
   // email session + resume pending topup after login
   useEffect(() => {
     const supabase = supabaseBrowser();
 
-    (async () => {
-      const res = await supabase.auth.getSession();
-      setUserEmail(res.data.session?.user?.email ?? null);
-    })();
+    const syncSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const s = data.session ?? null;
+      setUserEmail(s?.user?.email ?? null);
+      setUserId(s?.user?.id ?? null);
+    };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      setUserEmail(session?.user?.email ?? null);
+    syncSession();
 
-      if (event === "SIGNED_IN") {
-        try {
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session: Session | null) => {
+        setUserEmail(session?.user?.email ?? null);
+        setUserId(session?.user?.id ?? null);
+
+        // 로그인 직후: “top up 클릭→로그인→바로 결제” 이어가기
+        if (event === "SIGNED_IN") {
           const v = localStorage.getItem("resumeup_post_login_topup_variant");
           if (v) {
             localStorage.removeItem("resumeup_post_login_topup_variant");
-            setTimeout(() => topUpCreditsNow(v), 250);
+            setTimeout(() => topUpCreditsNow(v), 200);
           }
-        } catch {}
+        }
       }
-    });
+    );
 
     return () => sub.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -641,7 +658,7 @@ export default function HomePage() {
         localStorage.removeItem("resumeup_last_purchase_credits");
         setTimeout(() => setToast(null), 2500);
       }
-    } catch {}
+    } catch { }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -654,6 +671,20 @@ export default function HomePage() {
       (gaps.soft_skills?.length || 0)
     );
   }, [result]);
+
+  const topMissing = useMemo(() => {
+    const g = result?.gaps || {};
+    const all = [
+      ...(g.required_skills ?? []),
+      ...(g.tools ?? []),
+      ...(g.metrics_keywords ?? []),
+      ...(g.soft_skills ?? []),
+    ].map((x: any) => String(x)).filter(Boolean);
+
+    // 중복 제거
+    return Array.from(new Set(all)).slice(0, 12);
+  }, [result]);
+
   return (
     <main className="min-h-screen bg-white text-slate-900">
       {/* Header (Pricing/Terms removed) */}
@@ -665,7 +696,7 @@ export default function HomePage() {
           </a>
 
           <div className="flex items-center gap-3">
-            {userEmail ? (
+            {userId ? (
               <div className="flex items-center gap-2">
                 <a
                   href="/my-reports"
@@ -1150,6 +1181,23 @@ export default function HomePage() {
                     <div className="text-sm text-slate-600">
                       Missing keywords: <span className="font-semibold">{missingSummary}</span>
                     </div>
+                    {topMissing.length > 0 && (
+                      <div className="mt-4">
+                        <div className="text-sm font-semibold text-slate-900">
+                          Top missing keywords
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {topMissing.map((k) => (
+                            <span
+                              key={k}
+                              className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800"
+                            >
+                              {k}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1340,9 +1388,8 @@ export default function HomePage() {
                     setShowBundleModal(false);
                     topUpCreditsNow(plan.id);
                   }}
-                  className={`rounded-2xl border p-4 text-left hover:shadow-sm transition ${
-                    plan.id === "1332796" ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200"
-                  }`}
+                  className={`rounded-2xl border p-4 text-left hover:shadow-sm transition ${plan.id === "1332796" ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200"
+                    }`}
                 >
                   <div className="text-sm font-semibold text-slate-900">{plan.label}</div>
                   <div className="text-2xl font-semibold text-slate-900 mt-1">{plan.price}</div>
