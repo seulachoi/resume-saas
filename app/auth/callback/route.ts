@@ -8,20 +8,25 @@ export async function GET(req: Request) {
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") || "/";
 
-  // Supabase OAuth 에러가 내려오는 경우도 처리
-  const oauthError =
+  const cookieStore = await cookies();
+
+  // 1) Supabase/Google이 내려준 에러 파라미터가 있는지 먼저 확인
+  const oauthErr =
     url.searchParams.get("error") ||
     url.searchParams.get("error_code") ||
     url.searchParams.get("error_description");
 
-  // ✅ Next.js 최신 버전: cookies()가 Promise -> 반드시 await
-  const cookieStore = await cookies();
-
-  // code 없거나 에러면 홈으로(에러 표시용 query)
-  if (!code || oauthError) {
-    const redirectUrl = new URL(next, url.origin);
-    redirectUrl.searchParams.set("auth_error", "1");
-    return NextResponse.redirect(redirectUrl);
+  // ✅ code가 없으면: 어떤 파라미터로 돌아왔는지 표시
+  if (!code) {
+    const to = new URL(next, url.origin);
+    to.searchParams.set("auth_err", "missing_code");
+    to.searchParams.set("oauth_err", oauthErr ? String(oauthErr).slice(0, 120) : "none");
+    // callback에 실제로 들어온 query key 목록(원인 추적)
+    to.searchParams.set(
+      "keys",
+      Array.from(url.searchParams.keys()).slice(0, 12).join(",") || "none"
+    );
+    return NextResponse.redirect(to);
   }
 
   const supabase = createServerClient(
@@ -29,7 +34,6 @@ export async function GET(req: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // ✅ @supabase/ssr 권장: getAll / setAll
         getAll() {
           return cookieStore.getAll();
         },
@@ -42,10 +46,15 @@ export async function GET(req: Request) {
     }
   );
 
+  // 2) code -> session 교환
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-  const redirectUrl = new URL(next, url.origin);
-  if (error) redirectUrl.searchParams.set("auth_error", "1");
+  if (error) {
+    const to = new URL(next, url.origin);
+    to.searchParams.set("auth_err", "exchange_failed");
+    to.searchParams.set("msg", encodeURIComponent(String(error.message).slice(0, 160)));
+    return NextResponse.redirect(to);
+  }
 
-  return NextResponse.redirect(redirectUrl);
+  return NextResponse.redirect(new URL(next, url.origin));
 }
