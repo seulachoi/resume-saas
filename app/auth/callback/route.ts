@@ -1,40 +1,50 @@
+// app/auth/callback/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/";
+  const next = url.searchParams.get("next") || "/";
 
-  if (!code) return NextResponse.redirect(new URL(next, url.origin));
+  // code가 없으면 (해시 토큰으로 돌아온 케이스 등) 에러로 처리
+  if (!code) {
+    const to = new URL(`/?auth_error=missing_code`, url.origin);
+    return NextResponse.redirect(to);
+  }
 
-  // ✅ cookies()가 Promise로 잡히는 환경 대응
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
+        set(name: string, value: string, options: any) {
+          // Next cookies().set은 객체도 지원
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
         },
       },
     }
   );
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
+
   if (error) {
-    const failUrl = new URL(next, url.origin);
-    failUrl.searchParams.set("auth_error", "1");
-    return NextResponse.redirect(failUrl);
+    // 원인 추적용 (너무 길면 잘릴 수 있으니 code만)
+    const to = new URL(`/?auth_error=exchange_failed`, url.origin);
+    to.searchParams.set("msg", encodeURIComponent(error.message.slice(0, 120)));
+    return NextResponse.redirect(to);
   }
 
+  // 정상 -> next로
   return NextResponse.redirect(new URL(next, url.origin));
 }
