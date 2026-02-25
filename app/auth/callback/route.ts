@@ -3,34 +3,40 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-
+export async function GET(req: Request) {
+  const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") || "/";
 
-  // code가 없으면 (해시 토큰으로 돌아온 케이스 등) 에러로 처리
-  if (!code) {
-    const to = new URL(`/?auth_error=missing_code`, url.origin);
-    return NextResponse.redirect(to);
-  }
+  // Supabase OAuth 에러가 내려오는 경우도 처리
+  const oauthError =
+    url.searchParams.get("error") ||
+    url.searchParams.get("error_code") ||
+    url.searchParams.get("error_description");
 
-  const cookieStore = cookies();
+  // ✅ Next.js 최신 버전: cookies()가 Promise -> 반드시 await
+  const cookieStore = await cookies();
+
+  // code 없거나 에러면 홈으로(에러 표시용 query)
+  if (!code || oauthError) {
+    const redirectUrl = new URL(next, url.origin);
+    redirectUrl.searchParams.set("auth_error", "1");
+    return NextResponse.redirect(redirectUrl);
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        // ✅ @supabase/ssr 권장: getAll / setAll
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: any) {
-          // Next cookies().set은 객체도 지원
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options: any) {
-          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         },
       },
     }
@@ -38,13 +44,8 @@ export async function GET(request: Request) {
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-  if (error) {
-    // 원인 추적용 (너무 길면 잘릴 수 있으니 code만)
-    const to = new URL(`/?auth_error=exchange_failed`, url.origin);
-    to.searchParams.set("msg", encodeURIComponent(error.message.slice(0, 120)));
-    return NextResponse.redirect(to);
-  }
+  const redirectUrl = new URL(next, url.origin);
+  if (error) redirectUrl.searchParams.set("auth_error", "1");
 
-  // 정상 -> next로
-  return NextResponse.redirect(new URL(next, url.origin));
+  return NextResponse.redirect(redirectUrl);
 }
