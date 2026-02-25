@@ -1,5 +1,3 @@
-
-
 import { createClient } from "@supabase/supabase-js";
 
 export function supabaseBrowser() {
@@ -11,6 +9,7 @@ export function supabaseBrowser() {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        flowType: "pkce",
       },
     }
   );
