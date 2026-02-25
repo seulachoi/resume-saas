@@ -5,65 +5,75 @@ import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 export default function AuthCallbackPage() {
   const [status, setStatus] = useState<"working" | "error">("working");
-  const [message, setMessage] = useState("Signing you in…");
-  const [errorMsg, setErrorMsg] = useState("");
+  const [msg, setMsg] = useState("Signing you in…");
+  const [detail, setDetail] = useState("");
 
-  const run = async () => {
-    try {
-      const supabase = supabaseBrowser();
-
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const next = params.get("next") || "/";
-
-      if (!code) {
-        setStatus("error");
-        setMessage("Missing auth code.");
-        setErrorMsg("No code was found in the callback URL.");
-        return;
-      }
-
-      setMessage("Finalizing secure sign-in…");
-
-      // ✅ 핵심: PKCE code -> session 교환 (브라우저 storage의 code_verifier 사용)
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-      if (error) {
-        setStatus("error");
-        setMessage("Sign-in failed.");
-        setErrorMsg(error.message);
-        return;
-      }
-
-      // ✅ 세션이 실제로 생겼는지 한 번 더 확인
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        setStatus("error");
-        setMessage("Sign-in failed.");
-        setErrorMsg("Session was not created. Please try again.");
-        return;
-      }
-
-      // ✅ URL 정리 후 이동
-      window.location.replace(next);
-    } catch (e: any) {
-      setStatus("error");
-      setMessage("Sign-in failed.");
-      setErrorMsg(e?.message ?? "Unknown error");
-    }
+  const retryLogin = async () => {
+    // 홈으로 보내서 다시 Sign in 누르게 (가장 단순/확실)
+    window.location.replace("/?login_retry=1");
   };
 
   useEffect(() => {
+    const run = async () => {
+      try {
+        const supabase = supabaseBrowser();
+
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+
+        // ✅ next는 localStorage에서 복구 (없으면 /)
+        let next = "/";
+        try {
+          next = localStorage.getItem("resumeup_oauth_next") || "/";
+          localStorage.removeItem("resumeup_oauth_next");
+        } catch {}
+
+        // ✅ (A) code가 없으면: 지금 케이스 → 명확히 에러 표시
+        if (!code) {
+          setStatus("error");
+          setMsg("Sign-in failed (missing code).");
+          setDetail(
+            "OAuth callback did not include a `code`. This usually happens when the redirect URL is not handled as a PKCE callback. Please retry sign-in."
+          );
+          return;
+        }
+
+        // ✅ (B) code가 있으면: PKCE exchange
+        setMsg("Finalizing secure sign-in…");
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (error) {
+          setStatus("error");
+          setMsg("Sign-in failed.");
+          setDetail(error.message);
+          return;
+        }
+
+        // ✅ 세션 확인
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
+          setStatus("error");
+          setMsg("Sign-in failed.");
+          setDetail("Session was not created. Please retry.");
+          return;
+        }
+
+        window.location.replace(next);
+      } catch (e: any) {
+        setStatus("error");
+        setMsg("Sign-in failed.");
+        setDetail(e?.message ?? "Unknown error");
+      }
+    };
+
     run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <main className="min-h-screen bg-white flex items-center justify-center p-8">
       <div className="max-w-md w-full rounded-3xl border border-slate-200 bg-white p-7 space-y-4">
         <div className="text-xl font-semibold text-slate-900">ResumeUp</div>
-
-        <div className="text-slate-700">{message}</div>
+        <div className="text-slate-700">{msg}</div>
 
         {status === "working" && (
           <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
@@ -74,11 +84,11 @@ export default function AuthCallbackPage() {
         {status === "error" && (
           <>
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-800 text-sm">
-              {errorMsg}
+              {detail}
             </div>
 
             <button
-              onClick={run}
+              onClick={retryLogin}
               className="w-full rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
             >
               Retry sign-in
@@ -92,10 +102,6 @@ export default function AuthCallbackPage() {
             </a>
           </>
         )}
-
-        <div className="text-xs text-slate-500">
-          If this keeps failing, it’s usually caused by blocked cookies/storage or a domain mismatch.
-        </div>
       </div>
     </main>
   );

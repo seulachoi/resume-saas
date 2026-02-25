@@ -418,9 +418,17 @@ export default function HomePage() {
 
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
+  
+    // ✅ next 경로는 localStorage로 전달 (redirectTo query 제거)
+    try {
+      localStorage.setItem("resumeup_oauth_next", "/");
+    } catch {}
+  
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
   };
 
