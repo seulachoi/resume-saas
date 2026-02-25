@@ -1,37 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import type { Track, Seniority } from "@/lib/prompts";
 
-
+/** ===================== LocalStorage Keys ===================== */
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_SID_KEY = "resumeup_sid";
 const LS_TRACK_KEY = "resumeup_track";
 const LS_SENIORITY_KEY = "resumeup_seniority";
 
-function PrimaryButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900"
-    >
-      {children}
-    </button>
-  );
-}
+// Lemon default bundle (Most popular = 5 credits)
+const DEFAULT_TOPUP_VARIANT_ID = "1332796";
 
+/** ===================== Role Context (UI) ===================== */
+const TRACKS: { key: Track; label: string }[] = [
+  { key: "product_manager", label: "Product Manager" },
+  { key: "strategy_bizops", label: "Strategy / BizOps" },
+  { key: "data_analytics", label: "Data & Analytics" },
+  { key: "engineering", label: "Software Engineering" },
+  { key: "marketing_growth", label: "Marketing / Growth" },
+  { key: "sales_bd", label: "Sales / Business Dev" },
+  { key: "design_ux", label: "Design / UX" },
+  { key: "operations_program", label: "Operations / Program" },
+];
+
+const SENIORITIES: { key: Seniority; label: string }[] = [
+  { key: "entry", label: "Entry (0–2y)" },
+  { key: "mid", label: "Mid (3–6y)" },
+  { key: "senior", label: "Senior (7y+)" },
+];
+
+/** ===================== UI Helpers ===================== */
 function useInViewOnce<T extends Element>(threshold = 0.25) {
   const [seen, setSeen] = useState(false);
   const ref = useState<React.RefObject<T>>(() => ({ current: null } as any))[0];
@@ -58,24 +59,6 @@ function useInViewOnce<T extends Element>(threshold = 0.25) {
   return { ref, seen };
 }
 
-function ScoreRing({ value }: { value: number }) {
-  const v = Math.max(0, Math.min(100, value || 0));
-  return (
-    <div
-      className="h-16 w-16 rounded-full"
-      style={{
-        background: `conic-gradient(#0f172a ${v * 3.6}deg, #e2e8f0 0deg)`,
-      }}
-    >
-      <div className="h-full w-full p-2">
-        <div className="h-full w-full rounded-full bg-white flex items-center justify-center">
-          <div className="text-sm font-semibold text-slate-900">{v}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AnimatedRing({
   value,
   size = 96,
@@ -97,8 +80,7 @@ function AnimatedRing({
     }
 
     let raf = 0;
-    const from = 0;
-    setP(from);
+    setP(0);
 
     const startAt = performance.now();
     const tick = (now: number) => {
@@ -117,22 +99,19 @@ function AnimatedRing({
   const c = 2 * Math.PI * r;
   const dashOffset = c - (p / 100) * c;
 
-
+  // unique gradient id per component instance (prevents collisions)
+  const gid = useMemo(() => `ringGradient_${Math.random().toString(16).slice(2)}`, []);
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
-      <svg
-        viewBox="0 0 120 120"
-        className="-rotate-90"
-        style={{ width: size, height: size }}
-      >
+      <svg viewBox="0 0 120 120" className="-rotate-90" style={{ width: size, height: size }}>
         <circle cx="60" cy="60" r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke} />
         <circle
           cx="60"
           cy="60"
           r={r}
           fill="none"
-          stroke="url(#ringGradient)"
+          stroke={`url(#${gid})`}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={c}
@@ -140,7 +119,7 @@ function AnimatedRing({
           style={{ transition: "stroke-dashoffset 40ms linear" }}
         />
         <defs>
-          <linearGradient id="ringGradient" x1="0" y1="0" x2="120" y2="120">
+          <linearGradient id={gid} x1="0" y1="0" x2="120" y2="120">
             <stop offset="0%" stopColor="#10b981" />
             <stop offset="100%" stopColor="#34d399" />
           </linearGradient>
@@ -158,9 +137,9 @@ function AnimatedBar({
   value,
   tone = "after",
   duration = 700,
-  start = true
+  start = true,
 }: {
-  value: number;          // 0~100
+  value: number;
   tone?: "before" | "after";
   duration?: number;
   start?: boolean;
@@ -181,40 +160,19 @@ function AnimatedBar({
 
   return (
     <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
-      <div
-        className={`h-2 ${color}`}
-        style={{ width: `${w}%`, transition: `width ${duration}ms ease-out` }}
-      />
+      <div className={`h-2 ${color}`} style={{ width: `${w}%`, transition: `width ${duration}ms ease-out` }} />
     </div>
   );
 }
-
 function WhyResumeUpSection() {
   const s = useInViewOnce<HTMLDivElement>(0.25);
-
-  // 애니메이션 트리거: 섹션이 화면에 들어올 때만 실행
   const start = s.seen;
 
-  // Keyword chips 애니메이션(빨강→초록)
   const [kwOn, setKwOn] = useState(false);
   useEffect(() => {
     if (!start) return;
     const t = setTimeout(() => setKwOn(true), 700);
     return () => clearTimeout(t);
-  }, [start]);
-
-  // Credit progress 애니메이션 (0→5)
-  const [creditProg, setCreditProg] = useState(0);
-  useEffect(() => {
-    if (!start) return;
-    setCreditProg(0);
-    let i = 0;
-    const interval = setInterval(() => {
-      i += 1;
-      setCreditProg(i);
-      if (i >= 5) clearInterval(interval);
-    }, 220);
-    return () => clearInterval(interval);
   }, [start]);
 
   return (
@@ -227,7 +185,7 @@ function WhyResumeUpSection() {
           </p>
         </div>
 
-        {/* 1) BEFORE vs AFTER */}
+        {/* BEFORE vs AFTER */}
         <div className="rounded-3xl border border-slate-200 bg-white p-8 overflow-hidden relative">
           <div className="pointer-events-none absolute -top-16 -left-16 h-48 w-48 rounded-full bg-emerald-200/40 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-indigo-200/40 blur-3xl" />
@@ -235,9 +193,7 @@ function WhyResumeUpSection() {
           <div className="flex items-end justify-between flex-wrap gap-4">
             <div className="space-y-1">
               <div className="text-sm text-slate-500 font-semibold">Score-first clarity</div>
-              <div className="text-2xl font-semibold text-slate-900">
-                See exactly what changed (before → after)
-              </div>
+              <div className="text-2xl font-semibold text-slate-900">See exactly what changed (before → after)</div>
               <div className="text-sm text-slate-600">
                 Score + keyword gaps + concrete fixes — then a full rewrite and after-score report.
               </div>
@@ -249,7 +205,7 @@ function WhyResumeUpSection() {
           </div>
 
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* BEFORE card */}
+            {/* BEFORE */}
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
               <div className="flex items-center justify-between">
                 <div className="font-semibold text-slate-900">Before</div>
@@ -257,7 +213,6 @@ function WhyResumeUpSection() {
               </div>
 
               <div className="mt-5 flex items-center gap-4">
-                {/* static ring for before */}
                 <div className="relative h-20 w-20">
                   <svg viewBox="0 0 120 120" className="h-20 w-20 -rotate-90">
                     <circle cx="60" cy="60" r="46" fill="none" stroke="#e2e8f0" strokeWidth="12" />
@@ -301,7 +256,7 @@ function WhyResumeUpSection() {
               </ul>
             </div>
 
-            {/* AFTER card */}
+            {/* AFTER */}
             <div className="rounded-3xl border border-slate-900 bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-6 text-white">
               <div className="flex items-center justify-between">
                 <div className="font-semibold">After</div>
@@ -309,7 +264,6 @@ function WhyResumeUpSection() {
               </div>
 
               <div className="mt-5 flex items-center gap-4">
-                {/* animated ring after */}
                 <div className="bg-white rounded-2xl p-2">
                   <AnimatedRing value={82} size={80} start={start} />
                 </div>
@@ -353,13 +307,11 @@ function WhyResumeUpSection() {
           </div>
         </div>
 
-        {/* 2) Keyword intelligence (chips animate) */}
+        {/* Keyword intelligence */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-3xl border border-slate-200 bg-white p-8">
             <div className="text-sm text-slate-500 font-semibold">Keyword intelligence</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              Fill gaps naturally (no stuffing)
-            </div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">Fill gaps naturally (no stuffing)</div>
             <div className="mt-2 text-slate-600">
               We extract required skills, tools, and metric keywords from the job description — then integrate them naturally.
             </div>
@@ -371,7 +323,9 @@ function WhyResumeUpSection() {
                   key={k}
                   className={[
                     "rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-700",
-                    kwOn ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800",
+                    kwOn
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-rose-50 border-rose-200 text-rose-800",
                   ].join(" ")}
                 >
                   {kwOn ? `✓ ${k}` : `✕ ${k}`}
@@ -384,12 +338,10 @@ function WhyResumeUpSection() {
             </div>
           </div>
 
-          {/* 3) AI rewrite preview */}
+          {/* AI rewrite preview */}
           <div className="rounded-3xl border border-slate-200 bg-white p-8">
             <div className="text-sm text-slate-500 font-semibold">AI rewrite preview</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              Strong bullets recruiters can scan
-            </div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">Strong bullets recruiters can scan</div>
             <div className="mt-2 text-slate-600">
               We rewrite your experience into a clean ATS format with action verbs + structured impact.
             </div>
@@ -412,150 +364,91 @@ function WhyResumeUpSection() {
             </div>
 
             <div className="mt-6 flex items-center gap-2 text-sm font-medium text-emerald-600">
-              {/* <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                AI
-              </span> */}
-              <span>
-                AI restructures bullets using action verbs + measurable impact formatting.
-              </span>
+              <span>AI restructures bullets using action verbs + measurable impact formatting.</span>
             </div>
           </div>
         </div>
-
-        {/* 4) Credit reuse visualization */}
-        {/* <div className="rounded-3xl border border-slate-200 bg-white p-8">
-          <div className="flex items-end justify-between flex-wrap gap-4">
-            <div>
-              <div className="text-sm text-slate-500 font-semibold">Reusable credit system</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-900">
-                Buy once, apply to multiple roles
-              </div>
-              <div className="mt-2 text-slate-600">
-                Most candidates apply to 5+ jobs. Credits let you generate full reports repeatedly without repurchasing.
-              </div>
-            </div>
-
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-              Example: 5 credits
-            </span>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-5 gap-3">
-            {Array.from({ length: 5 }).map((_, idx) => {
-              const done = creditProg >= idx + 1;
-              return (
-                <div
-                  key={idx}
-                  className={[
-                    "rounded-2xl border p-4 text-center transition-all duration-500",
-                    done ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200",
-                  ].join(" ")}
-                >
-                  <div className="text-xs text-slate-500">Role {idx + 1}</div>
-                  <div className="mt-2 text-sm font-semibold">
-                    {done ? "✓ Full report" : "Pending"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-6">
-            <div className="text-xs text-slate-500">Credits usage</div>
-            <div className="mt-2 h-2 w-full rounded bg-slate-100 overflow-hidden">
-              <div
-                className="h-2 bg-emerald-500"
-                style={{ width: `${(creditProg / 5) * 100}%`, transition: "width 600ms ease-out" }}
-              />
-            </div>
-          </div>
-        </div> */}
 
         {/* CTA */}
         <div className="flex flex-col items-center pt-6 space-y-4">
           <a
             href="#analyzer"
-            className="
-      group
-      inline-flex items-center justify-center
-      rounded-3xl
-      px-14 py-5
-      text-lg font-semibold
-      text-white
-      bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500
-      hover:from-indigo-500 hover:via-purple-500 hover:to-emerald-400
-      shadow-2xl shadow-purple-500/30
-      transition-all duration-300
-      hover:scale-105
-    "
+            className="group inline-flex items-center justify-center rounded-3xl px-14 py-5 text-lg font-semibold text-white
+            bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500
+            hover:from-indigo-500 hover:via-purple-500 hover:to-emerald-400
+            shadow-2xl shadow-purple-500/30 transition-all duration-300 hover:scale-105"
           >
             See your score now
-            <span className="ml-3 transition-transform duration-300 group-hover:translate-x-1">
-              →
-            </span>
+            <span className="ml-3 transition-transform duration-300 group-hover:translate-x-1">→</span>
           </a>
 
-          <div className="text-sm text-slate-500">
-            Free ATS preview · No credit required
-          </div>
+          <div className="text-sm text-slate-500">Free ATS preview · No credit required</div>
         </div>
       </div>
     </section>
   );
 }
-
-const TRACKS: { key: Track; label: string }[] = [
-  { key: "product_manager", label: "Product Manager" },
-  { key: "strategy_bizops", label: "Strategy / BizOps" },
-  { key: "data_analytics", label: "Data & Analytics" },
-  { key: "engineering", label: "Software Engineering" },
-  { key: "marketing_growth", label: "Marketing / Growth" },
-  { key: "sales_bd", label: "Sales / Business Dev" },
-  { key: "design_ux", label: "Design / UX" },
-  { key: "operations_program", label: "Operations / Program" },
-];
-
-const SENIORITIES: { key: Seniority; label: string }[] = [
-  { key: "entry", label: "Entry (0–2y)" },
-  { key: "mid", label: "Mid (3–6y)" },
-  { key: "senior", label: "Senior (7y+)" },
-];
-
 export default function HomePage() {
   const [resumeText, setResumeText] = useState("");
   const [jdText, setJdText] = useState("");
-  const [result, setResult] = useState<any>(null); // preview result
+
+  const [result, setResult] = useState<any>(null);
+
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showBundleModal, setShowBundleModal] = useState(false);
   const [modalReason, setModalReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
+
   const [track, setTrack] = useState<Track>("product_manager");
   const [seniority, setSeniority] = useState<Seniority>("mid");
+
+  const how = useInViewOnce<HTMLDivElement>(0.25);
+
+  const creditsByVariant: Record<string, number> = {
+    "1320252": 1,
+    "1332796": 5,
+    "1332798": 10,
+  };
+
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/`,
-      },
-
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/` },
     });
-
   };
 
-  const DEFAULT_TOPUP_VARIANT_ID = "1332796";
+  const signOut = async () => {
+    const supabase = supabaseBrowser();
+    await supabase.auth.signOut();
+  };
 
+  const refreshCredits = async () => {
+    const supabase = supabaseBrowser();
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id ?? null;
+
+    if (!uid) {
+      setCredits(null);
+      return;
+    }
+
+    const { data: cRow } = await supabase.from("user_credits").select("balance").eq("user_id", uid).single();
+    setCredits(Number(cRow?.balance ?? 0));
+  };
+
+  // ✅ Top up credits: logout -> login -> Lemon checkout, login -> Lemon checkout
   const topUpCreditsNow = async (variantId: string = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
 
-    // 로그인 안되어있으면 로그인 먼저
     if (!userEmail) {
       try {
         localStorage.setItem("resumeup_post_login_topup_variant", variantId);
-      } catch { }
+      } catch {}
       await signInWithGoogle();
       return;
     }
@@ -570,14 +463,9 @@ export default function HomePage() {
         return;
       }
 
-      localStorage.setItem(
-        "resumeup_last_purchase_credits",
-        String(creditsByVariant[variantId] ?? 1)
-      );
-      localStorage.setItem(
-        "resumeup_last_purchase_ts",
-        String(Date.now())
-      );
+      // toast after redirect
+      localStorage.setItem("resumeup_last_purchase_credits", String(creditsByVariant[variantId] ?? 1));
+      localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
 
       const res = await fetch("/api/checkout/create", {
         method: "POST",
@@ -589,6 +477,8 @@ export default function HomePage() {
           resumeText: "",
           jdText: "",
           atsBefore: 0,
+          track,
+          seniority,
         }),
       });
 
@@ -601,530 +491,11 @@ export default function HomePage() {
     }
   };
 
-
-  function PrimaryButton({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: React.ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900"
-      >
-        {children}
-      </button>
-    );
-  }
-
-  function useInViewOnce<T extends Element>(threshold = 0.25) {
-    const [seen, setSeen] = useState(false);
-    const ref = useState<React.RefObject<T>>(() => ({ current: null } as any))[0];
-
-    useEffect(() => {
-      if (seen) return;
-      const el = ref.current;
-      if (!el) return;
-
-      const io = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((e) => e.isIntersecting)) {
-            setSeen(true);
-            io.disconnect();
-          }
-        },
-        { threshold }
-      );
-
-      io.observe(el);
-      return () => io.disconnect();
-    }, [seen, threshold, ref]);
-
-    return { ref, seen };
-  }
-
-  function ScoreRing({ value }: { value: number }) {
-    const v = Math.max(0, Math.min(100, value || 0));
-    return (
-      <div
-        className="h-16 w-16 rounded-full"
-        style={{
-          background: `conic-gradient(#0f172a ${v * 3.6}deg, #e2e8f0 0deg)`,
-        }}
-      >
-        <div className="h-full w-full p-2">
-          <div className="h-full w-full rounded-full bg-white flex items-center justify-center">
-            <div className="text-sm font-semibold text-slate-900">{v}</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function AnimatedRing({
-    value,
-    size = 96,
-    duration = 800,
-    start = true,
-  }: {
-    value: number;
-    size?: number;
-    duration?: number;
-    start?: boolean;
-  }) {
-    const v = Math.max(0, Math.min(100, value || 0));
-    const [p, setP] = useState(0);
-
-    useEffect(() => {
-      if (!start) {
-        setP(0);
-        return;
-      }
-
-      let raf = 0;
-      const from = 0;
-      setP(from);
-
-      const startAt = performance.now();
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - startAt) / duration);
-        const eased = 1 - Math.pow(1 - t, 3);
-        setP(Math.round(eased * v));
-        if (t < 1) raf = requestAnimationFrame(tick);
-      };
-
-      raf = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(raf);
-    }, [v, duration, start]);
-
-    const stroke = 12;
-    const r = 44;
-    const c = 2 * Math.PI * r;
-    const dashOffset = c - (p / 100) * c;
-
-    return (
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg
-          viewBox="0 0 120 120"
-          className="-rotate-90"
-          style={{ width: size, height: size }}
-        >
-          <circle cx="60" cy="60" r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke} />
-          <circle
-            cx="60"
-            cy="60"
-            r={r}
-            fill="none"
-            stroke="url(#ringGradient)"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={c}
-            strokeDashoffset={dashOffset}
-            style={{ transition: "stroke-dashoffset 40ms linear" }}
-          />
-          <defs>
-            <linearGradient id="ringGradient" x1="0" y1="0" x2="120" y2="120">
-              <stop offset="0%" stopColor="#10b981" />
-              <stop offset="100%" stopColor="#34d399" />
-            </linearGradient>
-          </defs>
-        </svg>
-
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-3xl font-semibold text-slate-900">{value}</div>
-        </div>
-      </div>
-    );
-  }
-
-  function AnimatedBar({
-    value,
-    tone = "after",
-    duration = 700,
-    start = true
-  }: {
-    value: number;          // 0~100
-    tone?: "before" | "after";
-    duration?: number;
-    start?: boolean;
-  }) {
-    const v = Math.max(0, Math.min(100, value || 0));
-    const [w, setW] = useState(0);
-
-    useEffect(() => {
-      if (!start) {
-        setW(0);
-        return;
-      }
-      const t = setTimeout(() => setW(v), 30);
-      return () => clearTimeout(t);
-    }, [v, start]);
-
-    const color = tone === "after" ? "bg-emerald-500" : "bg-slate-300";
-
-    return (
-      <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
-        <div
-          className={`h-2 ${color}`}
-          style={{ width: `${w}%`, transition: `width ${duration}ms ease-out` }}
-        />
-      </div>
-    );
-  }
-
-  function WhyResumeUpSection() {
-    const s = useInViewOnce<HTMLDivElement>(0.25);
-
-    // 애니메이션 트리거: 섹션이 화면에 들어올 때만 실행
-    const start = s.seen;
-
-    // Keyword chips 애니메이션(빨강→초록)
-    const [kwOn, setKwOn] = useState(false);
-    useEffect(() => {
-      if (!start) return;
-      const t = setTimeout(() => setKwOn(true), 700);
-      return () => clearTimeout(t);
-    }, [start]);
-
-    // Credit progress 애니메이션 (0→5)
-    const [creditProg, setCreditProg] = useState(0);
-    useEffect(() => {
-      if (!start) return;
-      setCreditProg(0);
-      let i = 0;
-      const interval = setInterval(() => {
-        i += 1;
-        setCreditProg(i);
-        if (i >= 5) clearInterval(interval);
-      }, 220);
-      return () => clearInterval(interval);
-    }, [start]);
-
-    return (
-      <section ref={s.ref} className="bg-slate-50 py-20">
-        <div className="mx-auto max-w-6xl px-6 space-y-12">
-          <div className="text-center space-y-3">
-            <h2 className="text-4xl font-semibold text-slate-900">Why ResumeUp?</h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              Not just “feedback.” A visual, score-first report you can act on — then generate a recruiter-grade rewrite.
-            </p>
-          </div>
-
-          {/* 1) BEFORE vs AFTER */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 overflow-hidden relative">
-            <div className="pointer-events-none absolute -top-16 -left-16 h-48 w-48 rounded-full bg-emerald-200/40 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-indigo-200/40 blur-3xl" />
-
-            <div className="flex items-end justify-between flex-wrap gap-4">
-              <div className="space-y-1">
-                <div className="text-sm text-slate-500 font-semibold">Score-first clarity</div>
-                <div className="text-2xl font-semibold text-slate-900">
-                  See exactly what changed (before → after)
-                </div>
-                <div className="text-sm text-slate-600">
-                  Score + keyword gaps + concrete fixes — then a full rewrite and after-score report.
-                </div>
-              </div>
-
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-                Preview first, upgrade when ready
-              </span>
-            </div>
-
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* BEFORE card */}
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-slate-900">Before</div>
-                  <span className="text-xs text-slate-500">sample</span>
-                </div>
-
-                <div className="mt-5 flex items-center gap-4">
-                  {/* static ring for before */}
-                  <div className="relative h-20 w-20">
-                    <svg viewBox="0 0 120 120" className="h-20 w-20 -rotate-90">
-                      <circle cx="60" cy="60" r="46" fill="none" stroke="#e2e8f0" strokeWidth="12" />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="46"
-                        fill="none"
-                        stroke="#94a3b8"
-                        strokeWidth="12"
-                        strokeLinecap="round"
-                        strokeDasharray={`${2 * Math.PI * 46 * 0.52} ${2 * Math.PI * 46}`}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-xl font-semibold text-slate-900">52</div>
-                    </div>
-                  </div>
-
-                  <div className="text-sm text-slate-600 space-y-1">
-                    <div>Skills: 55</div>
-                    <div>Impact: 48</div>
-                    <div>Brevity: 62</div>
-                  </div>
-                </div>
-
-                <div className="mt-5 text-xs text-slate-500">Missing keywords</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {["Cross-functional", "SaaS", "Revenue tooling", "Experimentation"].map((k) => (
-                    <span key={k} className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800">
-                      {k}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-5 text-xs text-slate-500">Typical issues</div>
-                <ul className="mt-2 text-sm text-slate-700 list-disc pl-5 space-y-1">
-                  <li>Vague bullets without measurable outcomes</li>
-                  <li>Keyword gaps vs job description</li>
-                  <li>Long paragraphs (low scannability)</li>
-                </ul>
-              </div>
-
-              {/* AFTER card */}
-              <div className="rounded-3xl border border-slate-900 bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold">After</div>
-                  <span className="text-xs text-white/70">sample</span>
-                </div>
-
-                <div className="mt-5 flex items-center gap-4">
-                  {/* animated ring after */}
-                  <div className="bg-white rounded-2xl p-2">
-                    <AnimatedRing value={82} size={80} start={start} />
-                  </div>
-
-                  <div className="text-sm text-white/80 space-y-1">
-                    <div>Skills: <span className="font-semibold text-white">84</span></div>
-                    <div>Impact: <span className="font-semibold text-white">80</span></div>
-                    <div>Brevity: <span className="font-semibold text-white">78</span></div>
-                  </div>
-                </div>
-
-                <div className="mt-6 text-xs text-white/70">Before → After</div>
-                <div className="mt-3 space-y-3">
-                  {[
-                    ["Overall", 52, 82],
-                    ["Skills", 55, 84],
-                    ["Impact", 48, 80],
-                  ].map(([label, b, a]) => (
-                    <div key={String(label)} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-white/70">
-                        <span>{label}</span>
-                        <span>
-                          {b} → <span className="font-semibold text-white">{a}</span>
-                        </span>
-                      </div>
-                      <div className="opacity-70">
-                        <AnimatedBar value={Number(b)} tone="before" start={start} />
-                      </div>
-                      <AnimatedBar value={Number(a)} tone="after" start={start} />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 flex items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-emerald-400 px-3 py-1 text-xs font-semibold text-slate-950">
-                    Recruiter-grade rewrite
-                  </span>
-                  <span className="text-xs text-white/70">Saved to My Reports</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 2) Keyword intelligence (chips animate) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-3xl border border-slate-200 bg-white p-8">
-              <div className="text-sm text-slate-500 font-semibold">Keyword intelligence</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-900">
-                Fill gaps naturally (no stuffing)
-              </div>
-              <div className="mt-2 text-slate-600">
-                We extract required skills, tools, and metric keywords from the job description — then integrate them naturally.
-              </div>
-
-              <div className="mt-6 text-sm font-semibold text-slate-900">Example: missing → added</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {["Cross-functional", "SaaS", "Revenue tooling", "Stakeholders", "Experimentation"].map((k) => (
-                  <span
-                    key={k}
-                    className={[
-                      "rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-700",
-                      kwOn ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800",
-                    ].join(" ")}
-                  >
-                    {kwOn ? `✓ ${k}` : `✕ ${k}`}
-                  </span>
-                ))}
-              </div>
-
-              <div className="mt-6 text-xs text-slate-500">
-                We never invent metrics. If unknown, we keep a TODO placeholder.
-              </div>
-            </div>
-
-            {/* 3) AI rewrite preview */}
-            <div className="rounded-3xl border border-slate-200 bg-white p-8">
-              <div className="text-sm text-slate-500 font-semibold">AI rewrite preview</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-900">
-                Strong bullets recruiters can scan
-              </div>
-              <div className="mt-2 text-slate-600">
-                We rewrite your experience into a clean ATS format with action verbs + structured impact.
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 gap-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs text-slate-500 font-semibold">Before</div>
-                  <div className="mt-2 text-sm text-slate-700">
-                    Built a web app and supported cross-functional stakeholders.
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="text-xs text-emerald-700 font-semibold">After</div>
-                  <div className="mt-2 text-sm text-slate-900">
-                    Led cross-functional roadmap execution across product, engineering, and finance, improving conversion by{" "}
-                    <span className="font-semibold">+12%</span> (TODO: confirm metric).
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-emerald-600">
-                {/* <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                AI
-              </span> */}
-                <span>
-                  AI restructures bullets using action verbs + measurable impact formatting.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 4) Credit reuse visualization */}
-          {/* <div className="rounded-3xl border border-slate-200 bg-white p-8">
-          <div className="flex items-end justify-between flex-wrap gap-4">
-            <div>
-              <div className="text-sm text-slate-500 font-semibold">Reusable credit system</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-900">
-                Buy once, apply to multiple roles
-              </div>
-              <div className="mt-2 text-slate-600">
-                Most candidates apply to 5+ jobs. Credits let you generate full reports repeatedly without repurchasing.
-              </div>
-            </div>
-
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-              Example: 5 credits
-            </span>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-5 gap-3">
-            {Array.from({ length: 5 }).map((_, idx) => {
-              const done = creditProg >= idx + 1;
-              return (
-                <div
-                  key={idx}
-                  className={[
-                    "rounded-2xl border p-4 text-center transition-all duration-500",
-                    done ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200",
-                  ].join(" ")}
-                >
-                  <div className="text-xs text-slate-500">Role {idx + 1}</div>
-                  <div className="mt-2 text-sm font-semibold">
-                    {done ? "✓ Full report" : "Pending"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-6">
-            <div className="text-xs text-slate-500">Credits usage</div>
-            <div className="mt-2 h-2 w-full rounded bg-slate-100 overflow-hidden">
-              <div
-                className="h-2 bg-emerald-500"
-                style={{ width: `${(creditProg / 5) * 100}%`, transition: "width 600ms ease-out" }}
-              />
-            </div>
-          </div>
-        </div> */}
-
-          {/* CTA */}
-          <div className="flex flex-col items-center pt-6 space-y-4">
-            <a
-              href="#analyzer"
-              className="
-      group
-      inline-flex items-center justify-center
-      rounded-3xl
-      px-14 py-5
-      text-lg font-semibold
-      text-white
-      bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500
-      hover:from-indigo-500 hover:via-purple-500 hover:to-emerald-400
-      shadow-2xl shadow-purple-500/30
-      transition-all duration-300
-      hover:scale-105
-    "
-            >
-              See your score now
-              <span className="ml-3 transition-transform duration-300 group-hover:translate-x-1">
-                →
-              </span>
-            </a>
-
-            <div className="text-sm text-slate-500">
-              Free ATS preview · No credit required
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  const TRACKS: { key: Track; label: string }[] = [
-    { key: "product_manager", label: "Product Manager" },
-    { key: "strategy_bizops", label: "Strategy / BizOps" },
-    { key: "data_analytics", label: "Data & Analytics" },
-    { key: "engineering", label: "Software Engineering" },
-    { key: "marketing_growth", label: "Marketing / Growth" },
-    { key: "sales_bd", label: "Sales / Business Dev" },
-    { key: "design_ux", label: "Design / UX" },
-    { key: "operations_program", label: "Operations / Program" },
-  ];
-
-  const SENIORITIES: { key: Seniority; label: string }[] = [
-    { key: "entry", label: "Entry (0–2y)" },
-    { key: "mid", label: "Mid (3–6y)" },
-    { key: "senior", label: "Senior (7y+)" },
-  ];
-
-
+  // ✅ "Unlock full rewrite" just means: top up credits (from $1)
   const handleUnlockClick = async () => {
     setError(null);
-
-    // 1) 로그인 안 되어있으면 -> 로그인부터
-    if (!userEmail) {
-      await signInWithGoogle();
-      return;
-    }
-
-    // 2) 로그인 되어있으면 -> 결제 모달 열기 (bundle 선택)
-    setModalReason("insufficient");
-    setShowBundleModal(true);
+    await topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID);
   };
-
 
   const generateFullWithCredit = async () => {
     setError(null);
@@ -1144,7 +515,6 @@ export default function HomePage() {
       return;
     }
 
-    // Create a credit-based session (no payment)
     const res = await fetch("/api/credit-session/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1153,6 +523,8 @@ export default function HomePage() {
         jdText,
         atsBefore: result?.atsScore ?? 0,
         userId,
+        track,
+        seniority,
       }),
     });
 
@@ -1165,137 +537,6 @@ export default function HomePage() {
     window.location.href = `/success?sid=${encodeURIComponent(data.sid)}`;
   };
 
-  const refreshCredits = async () => {
-    const supabase = supabaseBrowser();
-
-    const { data } = await supabase.auth.getSession();
-    const uid = data.session?.user?.id ?? null;
-
-    if (!uid) {
-      setCredits(null);
-      return;
-    }
-
-    const { data: cRow } = await supabase
-      .from("user_credits")
-      .select("balance")
-      .eq("user_id", uid)
-      .single();
-
-    setCredits(Number(cRow?.balance ?? 0));
-  };
-
-  const creditsByVariant: Record<string, number> = {
-    "1320252": 1,
-    "1332796": 5,
-    "1332798": 10,
-  };
-  const signOut = async () => {
-    const supabase = supabaseBrowser();
-    await supabase.auth.signOut();
-  };
-
-  useEffect(() => {
-    refreshCredits();
-
-    const supabase = supabaseBrowser();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      refreshCredits();
-    });
-
-    return () => {
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    // 1) Auto-open bundle modal when redirected with query params
-    const params = new URLSearchParams(window.location.search);
-    const openBundles = params.get("buy") === "1";
-    const reason = params.get("reason");
-    if (params.get("buy") === "1" && reason === "insufficient") {
-      setShowBundleModal(true);
-      setModalReason("insufficient");
-      window.history.replaceState({}, "", window.location.pathname + "#analyzer");
-    }
-
-    if (openBundles) {
-      setShowBundleModal(true);
-      setModalReason(reason || "insufficient");
-      // clean URL but keep hash if any
-      window.history.replaceState({}, "", window.location.pathname + "#analyzer");
-    }
-
-    // 2) Show "Credits +N added" toast once after purchase
-    try {
-      const ts = Number(localStorage.getItem("resumeup_last_purchase_ts") || "0");
-      const credits = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
-
-      // show toast if within 10 minutes
-      if (credits > 0 && ts && Date.now() - ts < 10 * 60 * 1000) {
-        setToast(`Credits +${credits} added`);
-        refreshCredits();
-        localStorage.removeItem("resumeup_last_purchase_ts");
-        localStorage.removeItem("resumeup_last_purchase_credits");
-
-        setTimeout(() => setToast(null), 2500);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    const supabase = supabaseBrowser();
-
-    (async () => {
-      const res = await supabase.auth.getSession();
-      setUserEmail(res.data.session?.user?.email ?? null);
-    })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(
-      (event: string, session: any) => {
-        setUserEmail(session?.user?.email ?? null);
-      }
-    );
-
-    return () => {
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-  // restore input
-  useEffect(() => {
-    try {
-      const r = localStorage.getItem(LS_RESUME_KEY) || "";
-      const j = localStorage.getItem(LS_JD_KEY) || "";
-      if (r) setResumeText(r);
-      if (j) setJdText(j);
-
-      // ✅ restore role context
-      const t = localStorage.getItem(LS_TRACK_KEY);
-      const s = localStorage.getItem(LS_SENIORITY_KEY);
-
-      if (t && TRACKS.some((x) => x.key === t)) {
-        setTrack(t as any);
-      }
-      if (s && SENIORITIES.some((x) => x.key === s)) {
-        setSeniority(s as any);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // persist input
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_RESUME_KEY, resumeText);
-      localStorage.setItem(LS_JD_KEY, jdText);
-    } catch { }
-  }, [resumeText, jdText]);
-
-
-
   const runPreview = async () => {
     setLoading(true);
     setError(null);
@@ -1305,74 +546,104 @@ export default function HomePage() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resumeText,
-          jdText,
-          mode: "preview",
-          track,
-          seniority,
-        }),
+        body: JSON.stringify({ resumeText, jdText, mode: "preview", track, seniority }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setResult(data);
     } catch (e: any) {
-      setError(e.message);
+      setError(e?.message ?? "Request failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const unlock = async (variantId: string) => {
-    setError(null);
+  /** ========= Effects ========= */
 
-    // 로그인 필수 (크레딧 귀속)
-    const supabase = supabaseBrowser();
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id ?? null;
-
-    if (!userId) {
-      setError("Please sign in to purchase credits and save your reports.");
-      return;
-    }
-
-    // 입력은 있어야 결제 의미 있음
-    if (resumeText.length < 200 || jdText.length < 200) {
-      setError("Please paste your resume + job description (min 200 characters each).");
-      return;
-    }
-
-    // toast용 저장
-    localStorage.setItem(
-      "resumeup_last_purchase_credits",
-      String(creditsByVariant[variantId] ?? 1)
-    );
-    localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
-
+  // restore inputs + context
+  useEffect(() => {
     try {
-      const res = await fetch("/api/checkout/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resumeText,
-          jdText,
-          // preview가 없을 수도 있으니 0 fallback
-          atsBefore: result?.overallBefore ?? result?.atsScore ?? 0,
-          variantId,
-          userId,
-        }),
-      });
+      const r = localStorage.getItem(LS_RESUME_KEY) || "";
+      const j = localStorage.getItem(LS_JD_KEY) || "";
+      if (r) setResumeText(r);
+      if (j) setJdText(j);
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Checkout creation failed");
+      const t = localStorage.getItem(LS_TRACK_KEY);
+      const s = localStorage.getItem(LS_SENIORITY_KEY);
+      if (t && TRACKS.some((x) => x.key === (t as any))) setTrack(t as any);
+      if (s && SENIORITIES.some((x) => x.key === (s as any))) setSeniority(s as any);
+    } catch {}
+  }, []);
 
-      localStorage.setItem(LS_SID_KEY, data.sid);
-      window.location.href = data.checkoutUrl;
-    } catch (e: any) {
-      setError(e.message);
-    }
-  };
+  // persist inputs
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_RESUME_KEY, resumeText);
+      localStorage.setItem(LS_JD_KEY, jdText);
+    } catch {}
+  }, [resumeText, jdText]);
+
+  // persist context
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_TRACK_KEY, track);
+      localStorage.setItem(LS_SENIORITY_KEY, seniority);
+    } catch {}
+  }, [track, seniority]);
+
+  // email session + resume pending topup after login
+  useEffect(() => {
+    const supabase = supabaseBrowser();
+
+    (async () => {
+      const res = await supabase.auth.getSession();
+      setUserEmail(res.data.session?.user?.email ?? null);
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      setUserEmail(session?.user?.email ?? null);
+
+      if (event === "SIGNED_IN") {
+        try {
+          const v = localStorage.getItem("resumeup_post_login_topup_variant");
+          if (v) {
+            localStorage.removeItem("resumeup_post_login_topup_variant");
+            setTimeout(() => topUpCreditsNow(v), 250);
+          }
+        } catch {}
+      }
+    });
+
+    return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // credits refresh
+  useEffect(() => {
+    refreshCredits();
+    const supabase = supabaseBrowser();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => refreshCredits());
+    return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // post-purchase toast
+  useEffect(() => {
+    try {
+      const ts = Number(localStorage.getItem("resumeup_last_purchase_ts") || "0");
+      const c = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
+
+      if (c > 0 && ts && Date.now() - ts < 10 * 60 * 1000) {
+        setToast(`Credits +${c} added`);
+        refreshCredits();
+        localStorage.removeItem("resumeup_last_purchase_ts");
+        localStorage.removeItem("resumeup_last_purchase_credits");
+        setTimeout(() => setToast(null), 2500);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const missingSummary = useMemo(() => {
     const gaps = result?.gaps || {};
@@ -1383,22 +654,9 @@ export default function HomePage() {
       (gaps.soft_skills?.length || 0)
     );
   }, [result]);
-
-  const previewOverall = useMemo(() => {
-    return Number(result?.overallBefore ?? result?.atsScore ?? 0);
-  }, [result]);
-
-  const how = useInViewOnce<HTMLDivElement>(0.25);
-
-
-
-  type Seniority = "entry" | "mid" | "senior";
-
-
   return (
     <main className="min-h-screen bg-white text-slate-900">
-
-      {/* Top bar */}
+      {/* Header (Pricing/Terms removed) */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2">
@@ -1407,8 +665,6 @@ export default function HomePage() {
           </a>
 
           <div className="flex items-center gap-3">
-
-
             {userEmail ? (
               <div className="flex items-center gap-2">
                 <a
@@ -1419,12 +675,25 @@ export default function HomePage() {
                 </a>
 
                 {credits !== null && (
-                  <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (credits === 0) topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID);
+                    }}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+                      credits === 0
+                        ? "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100"
+                        : "bg-slate-900 border-slate-200 text-white",
+                    ].join(" ")}
+                    title={credits === 0 ? "Click to top up credits" : undefined}
+                  >
                     Credits
-                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white/10 px-2 text-white">
+                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white/10 px-2">
                       {credits}
                     </span>
-                  </span>
+                    {credits === 0 && <span className="ml-1 text-xs underline underline-offset-2">Top up</span>}
+                  </button>
                 )}
 
                 <button
@@ -1445,27 +714,14 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      {/* ===================== HERO ===================== */}
-      {/* HERO (BetterCV-style) */}
+
+      {/* HERO */}
       <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
-        {/* glows */}
         <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
 
         <div className="mx-auto max-w-6xl px-6 py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative">
-          {/* LEFT */}
           <div className="space-y-6">
-            {/* <div className="flex flex-wrap gap-2">
-              {["Secure checkout", "English-first output", "No keyword stuffing", "No invented metrics"].map((t) => (
-                <span
-                  key={t}
-                  className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80"
-                >
-                  {t}
-                </span>
-              ))}
-            </div> */}
-
             <h1 className="text-5xl md:text-6xl font-semibold leading-tight tracking-tight">
               Improve your resume
               <br />
@@ -1473,8 +729,8 @@ export default function HomePage() {
             </h1>
 
             <p className="text-lg text-white/75 max-w-xl">
-              Paste your resume + job description. Get an ATS-style score preview and keyword gap report.
-              Unlock the full rewrite and after-score improvement report.
+              Paste your resume + job description. Get an ATS-style score preview and keyword gap report. Unlock the full
+              rewrite and after-score improvement report.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -1497,7 +753,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* RIGHT: Resume Report sample card */}
+          {/* sample report card */}
           <div className="relative">
             <div className="rounded-3xl bg-white shadow-2xl p-6 md:p-8 text-slate-900 border border-black/5">
               <div className="flex items-center justify-between">
@@ -1506,12 +762,10 @@ export default function HomePage() {
               </div>
 
               <div className="mt-5 grid grid-cols-12 gap-4 items-start">
-                {/* Score ring */}
                 <div className="col-span-5">
                   <div className="text-xs text-slate-500">Overall score</div>
                   <div className="mt-2 flex items-center gap-4">
                     <AnimatedRing value={78} size={96} />
-
                     <div className="space-y-1">
                       <div className="text-sm text-slate-600">
                         Skills <span className="font-semibold text-slate-900">80</span>
@@ -1526,7 +780,6 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Before/After bars */}
                 <div className="col-span-7">
                   <div className="text-xs text-slate-500">Before → After</div>
                   <div className="mt-3 space-y-3">
@@ -1550,7 +803,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Missing keywords */}
               <div className="mt-6">
                 <div className="text-xs text-slate-500">Missing keywords</div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -1565,7 +817,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Report includes */}
               <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs text-slate-500">Report includes</div>
                 <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -1580,41 +831,27 @@ export default function HomePage() {
       {/* TRUST STRIP */}
       <section className="bg-gradient-to-r from-slate-50 to-white border-y border-slate-200">
         <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-3 text-sm text-slate-600">
-
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-900">4.8/5</span>
             <span>average rating</span>
           </div>
-
           <div className="hidden md:block h-4 w-px bg-slate-200" />
-
-          <div>
-            Trusted by professionals applying to Shopify, Google, Amazon, and 100+ global teams
-          </div>
-
+          <div>Trusted by professionals applying to Shopify, Google, Amazon, and 100+ global teams</div>
           <div className="hidden md:block h-4 w-px bg-slate-200" />
-
-          <div className="text-slate-500">
-            Secure checkout · Credits never expire
-          </div>
-
+          <div className="text-slate-500">Secure checkout · Credits never expire</div>
         </div>
       </section>
 
-
-      {/* ===================== HOW IT WORKS (Report-first, in-view animation) ===================== */}
+      {/* HOW IT WORKS */}
       <section className="mx-auto max-w-6xl px-6 py-20">
-        {/* ✅ 이 div가 뷰포트에 들어오면 how.seen=true가 됨 */}
         <div ref={how.ref} className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          {/* LEFT: visual mock */}
+          {/* left mock */}
           <div className="anim-fadeup">
             <div className="rounded-[32px] bg-sky-50 border border-slate-200 p-8 relative overflow-hidden">
-              {/* subtle decorations */}
               <div className="pointer-events-none absolute -top-10 -left-10 h-40 w-40 rounded-full bg-sky-200/40 blur-2xl" />
               <div className="pointer-events-none absolute -bottom-14 -right-14 h-56 w-56 rounded-full bg-indigo-200/40 blur-2xl" />
 
               <div className="relative">
-                {/* back card */}
                 <div className="absolute -top-6 -left-6 w-[85%] rounded-2xl bg-white border border-slate-200 shadow-sm p-4 opacity-80">
                   <div className="h-3 w-32 rounded bg-slate-200" />
                   <div className="mt-3 space-y-2">
@@ -1624,7 +861,6 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* front card */}
                 <div className="relative rounded-3xl bg-white shadow-xl p-6 md:p-7 border border-black/5">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-slate-900">Resume Report</div>
@@ -1632,13 +868,10 @@ export default function HomePage() {
                   </div>
 
                   <div className="mt-5 grid grid-cols-12 gap-4 items-start">
-                    {/* Score ring */}
                     <div className="col-span-5">
                       <div className="text-xs text-slate-500">Overall score</div>
                       <div className="mt-2 flex items-center gap-4">
-                        {/* ✅ 스크롤로 섹션이 보일 때만 애니메이션 시작 */}
                         <AnimatedRing value={78} size={96} start={how.seen} />
-
                         <div className="space-y-1">
                           <div className="text-sm text-slate-600">
                             Skills <span className="font-semibold text-slate-900">80</span>
@@ -1653,7 +886,6 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* Before/After bars */}
                     <div className="col-span-7">
                       <div className="text-xs text-slate-500">Before → After</div>
                       <div className="mt-3 space-y-3">
@@ -1669,8 +901,6 @@ export default function HomePage() {
                                 {b} → <span className="font-semibold text-slate-900">{a}</span>
                               </span>
                             </div>
-
-                            {/* ✅ bars도 스크롤로 보일 때만 0→값으로 채워짐 */}
                             <AnimatedBar value={Number(b)} tone="before" start={how.seen} />
                             <AnimatedBar value={Number(a)} tone="after" start={how.seen} />
                           </div>
@@ -1679,7 +909,6 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  {/* missing keywords */}
                   <div className="mt-6">
                     <div className="text-xs text-slate-500">Missing keywords</div>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -1694,7 +923,6 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  {/* include strip */}
                   <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-xs text-slate-500">Report includes</div>
                     <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -1703,7 +931,6 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* highlight chip (not button-like) */}
                 <div className="absolute -bottom-4 left-6 rounded-full bg-emerald-100 text-emerald-900 text-xs font-semibold px-4 py-2 shadow border border-emerald-200">
                   Get the job faster
                 </div>
@@ -1711,12 +938,11 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* RIGHT: steps */}
+          {/* right steps */}
           <div className="anim-fadeup space-y-8">
             <div>
               <h2 className="text-4xl font-semibold leading-tight">
-                Improve your resume
-                <span className="text-emerald-500"> in 3 simple steps</span>
+                Improve your resume <span className="text-emerald-500">in 3 simple steps</span>
               </h2>
               <p className="mt-4 text-slate-600 max-w-xl">
                 You’ll see your score and gaps first — then generate a recruiter-grade rewrite with after-score improvements.
@@ -1725,7 +951,6 @@ export default function HomePage() {
 
             <div className="relative pl-10 space-y-8">
               <div className="absolute left-4 top-2 bottom-2 w-px bg-slate-200" />
-
               {[
                 {
                   step: "STEP 1",
@@ -1750,29 +975,21 @@ export default function HomePage() {
                   <div className="absolute -left-1 top-0 h-10 w-10 rounded-full bg-sky-50 border border-slate-200 flex items-center justify-center text-lg">
                     {s.icon}
                   </div>
-
                   <div className="ml-10">
-                    <div className="text-xs text-slate-400 font-semibold tracking-wide">
-                      {s.step}
-                    </div>
-                    <div className="mt-1 text-lg font-semibold text-slate-900">
-                      {s.title}
-                    </div>
-                    <div className="mt-2 text-sm text-slate-600">
-                      {s.desc}
-                    </div>
+                    <div className="text-xs text-slate-400 font-semibold tracking-wide">{s.step}</div>
+                    <div className="mt-1 text-lg font-semibold text-slate-900">{s.title}</div>
+                    <div className="mt-2 text-sm text-slate-600">{s.desc}</div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* ✅ bigger gradient CTA */}
             <div className="pt-4 flex justify-center">
               <a
                 href="#analyzer"
                 className="inline-flex items-center justify-center rounded-2xl px-10 py-4 text-base font-semibold text-white
-                     bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300
-                     shadow-lg shadow-emerald-500/20 transition"
+                bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300
+                shadow-lg shadow-emerald-500/20 transition"
               >
                 Get free preview
               </a>
@@ -1781,48 +998,22 @@ export default function HomePage() {
         </div>
       </section>
 
-
-      {/* ===================== VALUE PROPS ===================== */}
+      {/* VALUE PROPS */}
       <WhyResumeUpSection />
 
-
-      {/* ===================== ANALYZER ===================== */}
-      {/* ===================== ANALYZER (Start here box) ===================== */}
+      {/* ANALYZER */}
       <section id="analyzer" className="mx-auto max-w-6xl px-6 py-20 space-y-10">
         <div className="space-y-2">
           <h2 className="text-3xl font-semibold">Start here</h2>
           <p className="text-slate-600">
-            Paste your resume + job description. Get a detailed free preview (score + checklist + keyword gaps),
-            then generate a full recruiter-grade report.
+            Paste your resume + job description. Get a detailed free preview (score + checklist + keyword gaps), then generate a full recruiter-grade report.
           </p>
-
         </div>
 
-
         <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-6 shadow-sm">
-
+          {/* role context */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              {/* <div>
-                <div className="text-sm font-semibold text-slate-900">Target role context</div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Optional but recommended — improves scoring and rewrite precision.
-                </div>
-              </div> */}
-
-              {/* <button
-                type="button"
-                onClick={() => {
-                  setTrack("product_manager");
-                  setSeniority("mid");
-                }}
-                className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline underline-offset-4"
-              >
-                Reset
-              </button> */}
-            </div>
-
-            <div className="mt-4">
+            <div className="mt-1">
               <div className="text-s font-semibold text-slate-500 mb-2">Role track</div>
               <div className="flex flex-wrap gap-2">
                 {TRACKS.map((t) => {
@@ -1875,7 +1066,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Inputs */}
+          {/* inputs */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
               <div className="text-sm font-medium text-slate-700">Resume</div>
@@ -1898,8 +1089,7 @@ export default function HomePage() {
             </div>
           </div>
 
-
-          {/* ===== CTA (state-driven, simplified) ===== */}
+          {/* CTAs */}
           <div className="flex flex-wrap items-center gap-3">
             {credits && credits > 0 ? (
               <>
@@ -1908,8 +1098,8 @@ export default function HomePage() {
                   onClick={generateFullWithCredit}
                   disabled={loading || resumeText.length < 200 || jdText.length < 200}
                   className="rounded-2xl px-10 py-4 text-base font-semibold text-white
-                   bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300
-                   shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
+                  bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300
+                  shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
                 >
                   Generate full report now (uses 1 credit)
                 </button>
@@ -1924,21 +1114,17 @@ export default function HomePage() {
                   type="button"
                   onClick={runPreview}
                   disabled={loading || resumeText.length < 200 || jdText.length < 200}
-                  className="rounded-2xl px-10 py-4 text-base font-semibold text-white
-                   bg-slate-900 hover:bg-slate-800 transition disabled:opacity-50"
+                  className="rounded-2xl px-10 py-4 text-base font-semibold text-white bg-slate-900 hover:bg-slate-800 transition disabled:opacity-50"
                 >
                   {loading ? "Analyzing..." : "Get free preview"}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setModalReason("insufficient");
-                    setShowBundleModal(true);
-                  }}
+                  onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
                   className="rounded-2xl px-8 py-4 text-base font-semibold
-                   bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500
-                   text-white shadow-lg transition"
+                  bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500
+                  text-white shadow-lg transition"
                 >
                   Top up credits
                 </button>
@@ -1946,23 +1132,15 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{error}</div>}
 
-          {/* ====== DETAILED PREVIEW REPORT (old style) ====== */}
+          {/* preview report (kept concise here) */}
           {(credits === null || credits === 0) && result && (
-            <div className="anim-fadeup rounded-3xl border border-slate-200 bg-white p-6 space-y-6">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-6 flex-wrap">
+            <div className="anim-fadeup rounded-3xl border border-slate-200 bg-white p-6 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 rounded-full bg-slate-900 text-white flex items-center justify-center">
-                    <div className="text-xl font-semibold">
-                      {Number(result.overallBefore ?? result.atsScore ?? 0)}
-                    </div>
+                    <div className="text-xl font-semibold">{Number(result.overallBefore ?? result.atsScore ?? 0)}</div>
                   </div>
                   <div>
                     <div className="text-sm text-slate-500">ATS preview score</div>
@@ -1975,194 +1153,37 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Subscores */}
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    ["Skills", result.subscoresBefore?.skills ?? 0, "Keyword alignment vs JD"],
-                    ["Impact", result.subscoresBefore?.impact ?? 0, "Measurable outcomes"],
-                    ["Brevity", result.subscoresBefore?.brevity ?? 0, "Concise formatting"],
-                  ].map(([label, v, desc]) => (
-                    <div
-                      key={String(label)}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left min-w-[140px]"
-                    >
-                      <div className="text-xs text-slate-500">{label}</div>
-                      <div className="text-lg font-semibold text-slate-900">{Number(v)}/100</div>
-                      <div className="mt-1 text-[11px] text-slate-600">{String(desc)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Checklist */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  {
-                    title: "Resume length",
-                    badge: "Strong",
-                    tone: "good",
-                    tip: "Aim for 450–900 words. Keep it scannable.",
-                  },
-                  {
-                    title: "Bullet structure",
-                    badge: "Fix",
-                    tone: "bad",
-                    tip: "Increase bullets (≥35% of lines). Reduce long paragraphs.",
-                  },
-                  {
-                    title: "Measurable impact",
-                    badge: "Fix",
-                    tone: "bad",
-                    tip: "Add %, $, time saved, users, revenue. Avoid vague claims.",
-                  },
-                  {
-                    title: "Action verbs",
-                    badge: "Strong",
-                    tone: "good",
-                    tip: "Start bullets with: Led, Built, Improved, Launched, Optimized.",
-                  },
-                ].map((item) => {
-                  const badgeCls =
-                    item.tone === "good"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                      : "bg-rose-50 border-rose-200 text-rose-800";
-
-                  return (
-                    <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-slate-900">{item.title}</div>
-                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badgeCls}`}>
-                          {item.badge}
-                        </span>
-                      </div>
-                      <div className="mt-3 text-sm text-slate-700">{item.tip}</div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Keyword gaps by category */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="font-semibold text-slate-900">Keyword gaps</div>
-                  <div className="text-xs text-slate-500">
-                    The fastest way to increase your score.
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    ["Required skills", result.gaps?.required_skills ?? []],
-                    ["Tools", result.gaps?.tools ?? []],
-                    ["Metrics", result.gaps?.metrics_keywords ?? []],
-                    ["Soft skills", result.gaps?.soft_skills ?? []],
-                  ].map(([title, arr]) => (
-                    <div key={String(title)} className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold text-slate-900">{String(title)}</div>
-                        <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-800">
-                          Missing {(arr as any[]).length}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(arr as any[]).slice(0, 10).map((k) => (
-                          <span
-                            key={String(k)}
-                            className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800"
-                          >
-                            ✕ {String(k)}
-                          </span>
-                        ))}
-                        {(arr as any[]).length > 10 && (
-                          <span className="text-xs text-slate-500">
-                            +{(arr as any[]).length - 10} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Upsell line */}
-              {/* Upsell CTA (strong) */}
-              <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-6 text-white">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div>
-                    <div className="text-sm text-white/70 font-semibold">Full report</div>
-                    <div className="mt-1 text-2xl font-semibold">
-                      Unlock the full rewrite + after-score report
-                    </div>
-                    <div className="mt-2 text-sm text-white/75">
-                      Get the ATS-optimized rewrite, improvements list, and saved history in My Reports.
-                    </div>
-                  </div>
-
-                  {/* <span className="inline-flex items-center rounded-full bg-emerald-400 px-3 py-1 text-xs font-semibold text-slate-950">
-                    Recruiter-grade
-                  </span> */}
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  {credits && credits > 0 ? (
-                    <button
-                      type="button"
-                      onClick={generateFullWithCredit}
-                      className="rounded-2xl px-8 py-4 text-base font-semibold text-slate-950
-                   bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
-                   shadow-lg shadow-emerald-500/20 transition"
-                    >
-                      Generate full report now (uses 1 credit)
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleUnlockClick}
-                      className="rounded-2xl px-10 py-4 text-base font-semibold text-slate-950
-           bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
-           shadow-xl shadow-emerald-500/25 transition
-           hover:scale-[1.02] active:scale-[0.99]
-           focus:outline-none focus:ring-4 focus:ring-emerald-300/40"
-                    >
-                      Unlock full rewrite - from $1
-                    </button>
-                  )}
-
-                  <span className="text-sm text-white/70">
-                    {credits && credits > 0
-                      ? `You have ${credits} credits available.`
-                      : "Get the ATS-optimized rewrite + after-score report. Saved to My Reports."}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleUnlockClick}
+                  className="rounded-2xl px-8 py-4 text-base font-semibold text-slate-950
+                  bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
+                  shadow-xl shadow-emerald-500/25 transition"
+                >
+                  Unlock full rewrite - from $1
+                </button>
               </div>
             </div>
           )}
 
-          {/* Safety line */}
           <div className="text-xs text-slate-500">
             We don’t sell your data. No keyword stuffing. If a metric is unknown, we keep a TODO placeholder instead of inventing numbers.
           </div>
         </div>
       </section>
 
-
-
-      {/* ===================== PRICING (Conversion optimized) ===================== */}
+      {/* PRICING */}
       <section id="pricing" className="bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white py-24">
         <div className="mx-auto max-w-6xl px-6 space-y-12">
-
-          {/* Section header */}
           <div className="text-center space-y-3">
             <h2 className="text-4xl font-semibold">
               Invest once. <span className="text-emerald-400">Apply everywhere.</span>
             </h2>
             <p className="text-white/70 max-w-2xl mx-auto">
-              Each credit generates one full recruiter-grade report.
-              Credits never expire and can be reused for multiple job applications.
+              Each credit generates one full recruiter-grade report. Credits never expire and can be reused for multiple job applications.
             </p>
           </div>
 
-          {/* Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
@@ -2211,7 +1232,6 @@ export default function HomePage() {
               },
             ].map((plan) => {
               const isPopular = plan.variant === "popular";
-
               return (
                 <div
                   key={plan.id}
@@ -2222,7 +1242,6 @@ export default function HomePage() {
                     isPopular ? "border-emerald-400 shadow-2xl shadow-emerald-500/20 scale-105" : "",
                   ].join(" ")}
                 >
-                  {/* Badge */}
                   {plan.badge && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-emerald-400 text-slate-950 text-xs font-semibold px-4 py-1 rounded-full shadow-md">
                       {plan.badge}
@@ -2232,11 +1251,7 @@ export default function HomePage() {
                   <div className="text-xl font-semibold text-white">{plan.title}</div>
                   <div className="mt-3 text-4xl font-semibold text-white">{plan.price}</div>
 
-                  {plan.save && (
-                    <div className="mt-2 text-xs font-semibold text-emerald-200">
-                      {plan.save}
-                    </div>
-                  )}
+                  {plan.save && <div className="mt-2 text-xs font-semibold text-emerald-200">{plan.save}</div>}
 
                   <div className="mt-6 space-y-2 text-sm text-white/85">
                     {plan.bullets.map((b) => (
@@ -2247,12 +1262,9 @@ export default function HomePage() {
                     ))}
                   </div>
 
-                  {/* Footer emphasis */}
-                  <div className="mt-6 text-sm font-semibold text-white">
-                    {plan.foot}
-                  </div>
+                  <div className="mt-6 text-sm font-semibold text-white">{plan.foot}</div>
 
-                  {/* CTA button */}
+                  {/* ✅ buttons aligned: bottom fixed */}
                   <div className="mt-auto pt-6">
                     <button
                       type="button"
@@ -2271,32 +1283,10 @@ export default function HomePage() {
               );
             })}
           </div>
-
         </div>
       </section>
 
-
-      {/* ===================== FINAL CTA ===================== */}
-      <section className="py-20 text-center">
-        <h2 className="text-3xl font-semibold">
-          Ready to upgrade your resume?
-        </h2>
-        <p className="mt-4 text-slate-600">
-          Get your free preview now and see exactly what recruiters see.
-        </p>
-
-        <div className="mt-6">
-          <a
-            href="#analyzer"
-            className="rounded-xl bg-slate-900 text-white px-8 py-3 font-semibold"
-          >
-            Start now
-          </a>
-        </div>
-      </section>
-
-
-      {/* ===================== FOOTER ===================== */}
+      {/* FOOTER */}
       <footer className="border-t border-slate-200 py-10 text-center text-sm text-slate-500">
         <div className="space-x-4">
           <a href="/terms">Terms</a>
@@ -2307,6 +1297,64 @@ export default function HomePage() {
         <div className="mt-4">© {new Date().getFullYear()} ResumeUp</div>
       </footer>
 
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-2xl bg-slate-900 text-white px-5 py-3 shadow-lg border border-white/10 text-sm font-semibold">
+            {toast}
+          </div>
+        </div>
+      )}
+
+      {/* Bundle Modal (kept) */}
+      {showBundleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBundleModal(false)} />
+          <div className="relative w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xl font-semibold text-slate-900">Get more credits</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {modalReason === "signin"
+                    ? "Please sign in to attach credits to your account."
+                    : "You don’t have enough credits to generate a new full report."}
+                </div>
+              </div>
+              <button
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                onClick={() => setShowBundleModal(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                { id: "1320252", label: "1 Report", price: "$1", note: "Try once" },
+                { id: "1332796", label: "5 Reports", price: "$4.5", note: "Most popular" },
+                { id: "1332798", label: "10 Reports", price: "$8", note: "Best value" },
+              ].map((plan) => (
+                <button
+                  key={plan.id}
+                  onClick={() => {
+                    setShowBundleModal(false);
+                    topUpCreditsNow(plan.id);
+                  }}
+                  className={`rounded-2xl border p-4 text-left hover:shadow-sm transition ${
+                    plan.id === "1332796" ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200"
+                  }`}
+                >
+                  <div className="text-sm font-semibold text-slate-900">{plan.label}</div>
+                  <div className="text-2xl font-semibold text-slate-900 mt-1">{plan.price}</div>
+                  <div className="text-xs text-slate-600 mt-1">{plan.note}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 text-xs text-slate-500">Credits are tied to your account. Each full report uses 1 credit.</div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

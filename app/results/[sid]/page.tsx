@@ -5,6 +5,11 @@ function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : 0));
 }
 
+function nonNegativeDelta(after: number, before: number) {
+  const d = Math.round(after - before);
+  return d < 0 ? 0 : d;
+}
+
 function Pill({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
@@ -15,7 +20,8 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 function Bar({ value, tone }: { value: number; tone: "before" | "after" }) {
   const v = clamp(Number(value || 0));
-  const color = tone === "after" ? "#0f172a" : "#94a3b8";
+  // ✅ color system: before=slate, after=emerald (brand)
+  const color = tone === "after" ? "#10b981" : "#94a3b8";
   return (
     <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
       <div className="h-2" style={{ width: `${v}%`, background: color }} />
@@ -37,8 +43,7 @@ function Chip({
       ? "bg-emerald-50 border-emerald-200 text-emerald-800"
       : "bg-indigo-50 border-indigo-200 text-indigo-800";
 
-  const prefix =
-    tone === "missing" ? "✕ " : tone === "matched" ? "✓ " : "+ ";
+  const prefix = tone === "missing" ? "✕ " : tone === "matched" ? "✓ " : "+ ";
 
   return (
     <span className={`rounded-full border px-3 py-1 text-xs ${cls}`}>
@@ -58,12 +63,13 @@ function Ring({ value }: { value: number }) {
     <div className="relative h-28 w-28">
       <svg viewBox="0 0 120 120" className="h-28 w-28 -rotate-90">
         <circle cx="60" cy="60" r={r} fill="none" stroke="#e2e8f0" strokeWidth="12" />
+        {/* ✅ emerald ring */}
         <circle
           cx="60"
           cy="60"
           r={r}
           fill="none"
-          stroke="#0f172a"
+          stroke="#10b981"
           strokeWidth="12"
           strokeDasharray={`${dash} ${c - dash}`}
           strokeLinecap="round"
@@ -96,7 +102,7 @@ function prettyTrack(t?: string) {
     design_ux: "Design / UX",
     operations_program: "Operations / Program",
   };
-  return t ? (map[t] ?? t) : "General";
+  return t ? map[t] ?? t : "General";
 }
 
 function prettySeniority(s?: string) {
@@ -105,7 +111,7 @@ function prettySeniority(s?: string) {
     mid: "Mid-level",
     senior: "Senior-level",
   };
-  return s ? (map[s] ?? s) : "Mid-level";
+  return s ? map[s] ?? s : "Mid-level";
 }
 
 export default async function ResultsPage({
@@ -128,9 +134,13 @@ export default async function ResultsPage({
   }
 
   const sb = supabaseServer();
+
+  // auth user (server)
   const { data: authData } = await sb.auth.getUser();
   const user = authData.user ?? null;
+  const userEmail = user?.email ?? null;
 
+  // credits
   let balance: number | null = null;
   if (user?.id) {
     const { data: cRow } = await sb
@@ -176,7 +186,7 @@ export default async function ResultsPage({
       <main className="min-h-screen bg-white p-10">
         <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-6">
           <h1 className="text-xl font-semibold text-slate-900">Preparing your report…</h1>
-          <p className="mt-2 text-slate-600">Your payment is confirmed. Please refresh in a moment.</p>
+          <p className="mt-2 text-slate-600">Payment is confirmed. Please refresh in a moment.</p>
           <div className="mt-4 h-2 w-full rounded bg-slate-100 overflow-hidden">
             <div className="h-2 w-1/2 bg-slate-900 animate-pulse" />
           </div>
@@ -187,37 +197,43 @@ export default async function ResultsPage({
 
   const r = session.result_json as any;
 
-  // Context / personalization
+  // Context
   const ctx = r.selectedContext || {};
   const trackLabel = prettyTrack(ctx.track);
   const seniorityLabel = prettySeniority(ctx.seniority);
 
-  const personalization = r.personalization || {
-    headline: `Personalized report for ${trackLabel} · ${seniorityLabel}`,
-    subline:
-      "This report applied role-specific keyword weighting and seniority-adjusted impact expectations.",
-  };
+  // Overall
+  const overallBefore = Number(r.overall_before ?? r.ats_before ?? session.ats_before ?? 0);
+  const overallAfterRaw = Number(r.overall_after ?? r.ats_after ?? session.ats_after ?? overallBefore);
 
+  // ✅ never show regression
+  const overallAfter = Math.max(overallBefore, overallAfterRaw);
+  const deltaSafe = nonNegativeDelta(overallAfter, overallBefore);
+
+  // Score drivers (if present)
   const scoreDrivers = r.scoreDrivers || null;
   const deltas = scoreDrivers?.deltas || null;
 
-  // Overall
-  const overallBefore = Number(r.overall_before ?? r.ats_before ?? session.ats_before ?? 0);
-  const overallAfter = Number(r.overall_after ?? r.ats_after ?? session.ats_after ?? overallBefore);
-  const delta = overallAfter - overallBefore;
-
-  // Subscores
+  // Subscores for bars (we keep to show in header bars, but REMOVE the 3-card grid)
   const sbB = r.subscores_before || {};
   const sbA = r.subscores_after || {};
+
   const subsBefore = {
     skills: Number(sbB.skills ?? 0),
     impact: Number(sbB.impact ?? 0),
     brevity: Number(sbB.brevity ?? 0),
   };
-  const subsAfter = {
+  const subsAfterRaw = {
     skills: Number(sbA.skills ?? subsBefore.skills ?? 0),
     impact: Number(sbA.impact ?? subsBefore.impact ?? 0),
     brevity: Number(sbA.brevity ?? subsBefore.brevity ?? 0),
+  };
+
+  // ✅ never show regression in subs either (trust guard)
+  const subsAfter = {
+    skills: Math.max(subsBefore.skills, subsAfterRaw.skills),
+    impact: Math.max(subsBefore.impact, subsAfterRaw.impact),
+    brevity: Math.max(subsBefore.brevity, subsAfterRaw.brevity),
   };
 
   // Keywords + gaps + improvements
@@ -240,43 +256,34 @@ export default async function ResultsPage({
   const metricsMatched = computeMatched(metricsAll, metricsMissing);
   const softMatched = computeMatched(softAll, softMissing);
 
-  const addedKeywords = [
-    ...(improvements.required_skills_added || []),
-    ...(improvements.tools_added || []),
-    ...(improvements.metrics_added || []),
-    ...(improvements.soft_skills_added || []),
-  ].map((x: any) => String(x));
+  // ✅ show added by category (detailed)
+  const addedRequired = list(improvements.required_skills_added);
+  const addedTools = list(improvements.tools_added);
+  const addedMetrics = list(improvements.metrics_added);
+  const addedSoft = list(improvements.soft_skills_added);
 
   const rewritten = String(r.rewrittenResume || "");
   const downloadName = `resumeup-rewritten-${sid.slice(0, 8)}.txt`;
 
-  // richer “what changed” summaries
-  const changedSummary = {
-    addedTotal: addedKeywords.length,
-    requiredAdded: (improvements.required_skills_added || []).length,
-    toolsAdded: (improvements.tools_added || []).length,
-    metricsAdded: (improvements.metrics_added || []).length,
-    softAdded: (improvements.soft_skills_added || []).length,
-  };
+  // Personalized banner copy (with email)
+  const headline = userEmail
+    ? `Personalized report for ${userEmail} — ${trackLabel} · ${seniorityLabel}`
+    : `Personalized report — ${trackLabel} · ${seniorityLabel}`;
+
+  const subline =
+    "This report applied role-specific keyword weighting and seniority-adjusted impact expectations.";
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
-      {/* Top bar */}
-      <header className="border-b border-slate-200 bg-white">
+      {/* ✅ Header: match my-reports style (no Pricing/Terms) */}
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-slate-900" />
-            <div className="font-semibold">ResumeUp</div>
+            <div className="font-semibold text-slate-900">ResumeUp</div>
           </a>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href="/#analyzer"
-              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
-            >
-              Analyze again
-            </a>
-
             <a
               href="/my-reports"
               className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
@@ -293,26 +300,33 @@ export default async function ResultsPage({
               </span>
             )}
 
-            <Pill>Report saved</Pill>
+            {!userEmail && (
+              <a
+                href="/#analyzer"
+                className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+              >
+                Sign in
+              </a>
+            )}
+
+            <a
+              href="/#analyzer"
+              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+            >
+              New analysis
+            </a>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
-        {/* PERSONALIZED BANNER */}
+        {/* ✅ Personalized banner (with email) */}
         <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-indigo-50 to-emerald-50 p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="space-y-1">
               <div className="text-xs font-semibold text-slate-500">Personalized report</div>
-              <div className="text-xl font-semibold text-slate-900">
-                {String(personalization.headline ?? `Personalized for ${trackLabel} · ${seniorityLabel}`)}
-              </div>
-              <div className="text-sm text-slate-600 max-w-3xl">
-                {String(
-                  personalization.subline ??
-                    "This report applied role-specific keyword weighting and seniority-adjusted impact expectations."
-                )}
-              </div>
+              <div className="text-xl font-semibold text-slate-900">{headline}</div>
+              <div className="text-sm text-slate-600 max-w-3xl">{subline}</div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -322,34 +336,31 @@ export default async function ResultsPage({
           </div>
         </section>
 
-        {/* HERO REPORT HEADER */}
+        {/* Overall header */}
         <section className="rounded-2xl border border-slate-200 bg-white p-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
             <div className="space-y-2">
               <div className="text-sm text-slate-500">Overall score</div>
               <div className="text-4xl font-semibold">
                 {clamp(overallAfter)}/100{" "}
-                <span
-                  className={`text-base font-semibold ${
-                    delta >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
-                >
-                  ({delta >= 0 ? "+" : ""}
-                  {delta} pts)
+                <span className="text-base font-semibold text-emerald-700">
+                  {deltaSafe === 0 ? "(No change)" : `(+${deltaSafe} pts)`}
                 </span>
               </div>
               <div className="text-sm text-slate-600">
                 Before {clamp(overallBefore)} → After {clamp(overallAfter)}
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                (Paid reports never regress — score is guaranteed to stay the same or improve.)
+                Paid reports never regress — score is guaranteed to stay the same or improve.
               </div>
             </div>
 
             <div className="flex items-center gap-8">
               <Ring value={overallAfter} />
+
               <div className="space-y-3 min-w-[260px]">
                 <div className="text-xs text-slate-500">Before → After</div>
+
                 {(
                   [
                     ["Overall", overallBefore, overallAfter],
@@ -363,9 +374,7 @@ export default async function ResultsPage({
                       <span>{label}</span>
                       <span>
                         {clamp(Number(b))} →{" "}
-                        <span className="font-semibold text-slate-900">
-                          {clamp(Number(a))}
-                        </span>
+                        <span className="font-semibold text-slate-900">{clamp(Number(a))}</span>
                       </span>
                     </div>
                     <Bar value={Number(b)} tone="before" />
@@ -377,7 +386,7 @@ export default async function ResultsPage({
           </div>
         </section>
 
-        {/* SCORE DRIVERS (NEW) */}
+        {/* Score drivers */}
         <section className="rounded-2xl border border-slate-200 bg-white p-8 space-y-4">
           <div>
             <div className="text-2xl font-semibold">Score drivers</div>
@@ -390,34 +399,36 @@ export default async function ResultsPage({
             {[
               {
                 k: "Skills",
-                v: deltas?.skills ?? (subsAfter.skills - subsBefore.skills),
+                v: Number(deltas?.skills ?? subsAfter.skills - subsBefore.skills),
                 hint: `${trackLabel} keyword weighting`,
               },
               {
                 k: "Impact",
-                v: deltas?.impact ?? (subsAfter.impact - subsBefore.impact),
+                v: Number(deltas?.impact ?? subsAfter.impact - subsBefore.impact),
                 hint: `${seniorityLabel} metric expectations`,
               },
               {
                 k: "Brevity",
-                v: deltas?.brevity ?? (subsAfter.brevity - subsBefore.brevity),
+                v: Number(deltas?.brevity ?? subsAfter.brevity - subsBefore.brevity),
                 hint: "structure & scannability",
               },
               {
                 k: "Overall",
-                v: deltas?.overall ?? (overallAfter - overallBefore),
+                v: Number(deltas?.overall ?? overallAfter - overallBefore),
                 hint: "combined weighted score",
               },
-            ].map((x) => (
-              <div key={x.k} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <div className="text-xs text-slate-500">{x.k}</div>
-                <div className="mt-2 text-2xl font-semibold text-slate-900">
-                  {x.v >= 0 ? "+" : ""}
-                  {Math.round(x.v)} pts
+            ].map((x) => {
+              const safe = Math.max(0, Math.round(x.v));
+              return (
+                <div key={x.k} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="text-xs text-slate-500">{x.k}</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-900">
+                    {safe === 0 ? "0 pts" : `+${safe} pts`}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-600">{x.hint}</div>
                 </div>
-                <div className="mt-2 text-xs text-slate-600">{x.hint}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {Array.isArray(scoreDrivers?.narrative) && scoreDrivers.narrative.length > 0 && (
@@ -429,94 +440,14 @@ export default async function ResultsPage({
           )}
         </section>
 
-        {/* SUBSCORES */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {(
-            [
-              ["Skills", subsBefore.skills, subsAfter.skills, "Keyword alignment vs JD"],
-              ["Impact", subsBefore.impact, subsAfter.impact, "Evidence of measurable outcomes"],
-              ["Brevity", subsBefore.brevity, subsAfter.brevity, "Conciseness & bullet readability"],
-            ] as Array<[string, number, number, string]>
-          ).map(([name, b, a, desc]) => (
-            <div key={name} className="rounded-2xl border border-slate-200 bg-white p-6">
-              <div className="text-sm text-slate-500">{name}</div>
-              <div className="mt-2 text-2xl font-semibold">{clamp(Number(a))}/100</div>
-              <div className="mt-1 text-sm text-slate-600">
-                Before {clamp(Number(b))} → After{" "}
-                <span className="font-semibold text-slate-900">{clamp(Number(a))}</span>
-              </div>
-              <div className="mt-3 text-xs text-slate-500">{desc}</div>
-            </div>
-          ))}
-        </section>
+        {/* ✅ (8) removed SUBSCORES 3-card grid entirely */}
 
-        {/* INSTANT RESUME REVIEW */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-8 space-y-4">
-          <div>
-            <div className="text-2xl font-semibold">Instant resume review</div>
-            <div className="mt-1 text-slate-600">
-              Fast fixes that typically move the score the most.
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              {
-                title: "Resume length",
-                status: "good",
-                tip: "Aim for 450–900 words. Keep it scannable.",
-              },
-              {
-                title: "Bullet structure",
-                status: "ok",
-                tip: "Use more bullet points (≥35% of lines). Reduce long paragraphs.",
-              },
-              {
-                title: "Measurable impact",
-                status: "needs_work",
-                tip: "Add 2–3 metrics: %, $, time saved, users, revenue, throughput.",
-              },
-              {
-                title: "Action verbs",
-                status: "good",
-                tip: "Start bullets with strong verbs: Led, Built, Improved, Launched, Optimized.",
-              },
-            ].map((item) => {
-              const badge =
-                item.status === "good"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : item.status === "ok"
-                  ? "bg-amber-50 border-amber-200 text-amber-800"
-                  : "bg-rose-50 border-rose-200 text-rose-800";
-
-              const label =
-                item.status === "good" ? "Strong" : item.status === "ok" ? "Average" : "Fix";
-
-              return (
-                <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold">{item.title}</div>
-                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge}`}>
-                      {label}
-                    </span>
-                  </div>
-                  <div className="mt-3 text-sm text-slate-700">{item.tip}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="text-xs text-slate-500">
-            We never invent metrics. If unknown, we keep a TODO placeholder instead.
-          </div>
-        </section>
-
-        {/* KEYWORD REPORT */}
+        {/* Keyword report */}
         <section className="rounded-2xl border border-slate-200 bg-white p-8 space-y-6">
           <div>
             <div className="text-2xl font-semibold">Keyword report</div>
             <div className="mt-1 text-slate-600">
-              Missing keywords are the fastest way to increase your score.
+              Missing keywords are the fastest way to increase your ATS match.
             </div>
           </div>
 
@@ -565,64 +496,100 @@ export default async function ResultsPage({
           </div>
         </section>
 
-        {/* WHAT CHANGED (UPGRADED) */}
+        {/* ✅ (9) What changed: show per category + professional recommendations */}
         <section className="rounded-2xl border border-slate-200 bg-white p-8 space-y-6">
           <div>
             <div className="text-2xl font-semibold">What changed</div>
             <div className="mt-1 text-slate-600">
-              A deeper summary of what was improved and why it matters for ATS screens.
+              What was added and strengthened to improve ATS matching for your target role.
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { k: "Required skills added", v: changedSummary.requiredAdded },
-              { k: "Tools added", v: changedSummary.toolsAdded },
-              { k: "Metrics language added", v: changedSummary.metricsAdded },
-            ].map((x) => (
-              <div key={x.k} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <div className="text-xs text-slate-500">{x.k}</div>
-                <div className="mt-2 text-2xl font-semibold text-slate-900">{x.v}</div>
-                <div className="mt-1 text-xs text-slate-600">Integrated naturally (no stuffing)</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-3">
+              <div className="font-semibold text-slate-900">Required skills added</div>
+              <div className="text-xs text-slate-600">
+                {addedRequired.length} item(s) integrated.
               </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <div className="font-semibold">Keywords added</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {addedKeywords.slice(0, 28).map((k) => (
-                  <Chip key={"a-" + k} text={k} tone="added" />
+              <div className="flex flex-wrap gap-2">
+                {addedRequired.slice(0, 24).map((k) => (
+                  <Chip key={"req-" + k} text={k} tone="added" />
                 ))}
-                {addedKeywords.length === 0 && (
-                  <div className="text-sm text-slate-500">No added keywords detected.</div>
+                {addedRequired.length === 0 && (
+                  <div className="text-sm text-slate-500">No required-skill additions detected.</div>
                 )}
               </div>
             </div>
 
-            <div>
-              <div className="font-semibold">Next actions</div>
-              <ul className="mt-3 list-disc pl-5 text-slate-700 space-y-2 text-sm">
-                <li>Add 2–3 measurable metrics (%, $, time saved) where possible.</li>
-                <li>Keep bullets concise; avoid long paragraphs.</li>
-                <li>Mirror JD wording naturally (no keyword stuffing).</li>
-                <li>
-                  Maintain scope expectations for <b>{trackLabel}</b> at <b>{seniorityLabel}</b>.
-                </li>
-              </ul>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-3">
+              <div className="font-semibold text-slate-900">Tools added</div>
+              <div className="text-xs text-slate-600">
+                {addedTools.length} item(s) integrated.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {addedTools.slice(0, 24).map((k) => (
+                  <Chip key={"tool-" + k} text={k} tone="added" />
+                ))}
+                {addedTools.length === 0 && (
+                  <div className="text-sm text-slate-500">No tool additions detected.</div>
+                )}
+              </div>
             </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-3">
+              <div className="font-semibold text-slate-900">Metrics language added</div>
+              <div className="text-xs text-slate-600">
+                {addedMetrics.length} item(s) integrated.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {addedMetrics.slice(0, 24).map((k) => (
+                  <Chip key={"met-" + k} text={k} tone="added" />
+                ))}
+                {addedMetrics.length === 0 && (
+                  <div className="text-sm text-slate-500">No metrics additions detected.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-3">
+              <div className="font-semibold text-slate-900">Soft skills added</div>
+              <div className="text-xs text-slate-600">
+                {addedSoft.length} item(s) integrated.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {addedSoft.slice(0, 24).map((k) => (
+                  <Chip key={"soft-" + k} text={k} tone="added" />
+                ))}
+                {addedSoft.length === 0 && (
+                  <div className="text-sm text-slate-500">No soft-skill additions detected.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <div className="font-semibold text-slate-900">Recommended improvements</div>
+            <ul className="mt-3 list-disc pl-5 text-slate-700 space-y-2 text-sm">
+              <li>
+                Add 2–3 measurable metrics (%, $, time saved, users) to match <b>{seniorityLabel}</b> expectations.
+              </li>
+              <li>
+                Keep bullets concise and impact-first (better scannability for ATS + recruiters).
+              </li>
+              <li>
+                Mirror key JD phrases naturally for <b>{trackLabel}</b> roles (avoid keyword stuffing).
+              </li>
+            </ul>
           </div>
         </section>
 
-        {/* REWRITTEN RESUME */}
+        {/* Rewritten resume */}
         <section className="rounded-2xl border border-slate-200 bg-white p-8 space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <div className="text-2xl font-semibold">Rewritten resume</div>
               <div className="mt-1 text-slate-600">Copy/paste into your resume template.</div>
             </div>
-
             <ClientActions textToCopy={rewritten} filename={downloadName} />
           </div>
 

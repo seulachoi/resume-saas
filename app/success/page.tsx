@@ -12,13 +12,14 @@ async function sleep(ms: number) {
 export default function SuccessPage() {
   const [sid, setSid] = useState<string>("");
   const [status, setStatus] = useState<Status>("loading");
-  const [message, setMessage] = useState<string>("Preparing…");
+  const [message, setMessage] = useState<string>("Preparing your purchase…");
   const [error, setError] = useState<string>("");
 
-  // Wait for user session (prevents OAuth loop)
+  // Wait for a user session (prevents OAuth loop)
   const waitForUser = async (maxMs = 7000) => {
     const supabase = supabaseBrowser();
     const start = Date.now();
+
     while (Date.now() - start < maxMs) {
       const { data } = await supabase.auth.getUser();
       const uid = data.user?.id ?? null;
@@ -31,9 +32,9 @@ export default function SuccessPage() {
   const runGenerate = async (sidValue: string) => {
     setStatus("generating");
     setError("");
-    setMessage("Confirming payment…");
+    setMessage("Finalizing your purchase…");
 
-    // Prefer having a user (bind purchase to account + credits)
+    // Prefer having a user: attach purchase to account + apply credits reliably
     const uid = await waitForUser(7000);
 
     if (!uid) {
@@ -42,25 +43,24 @@ export default function SuccessPage() {
       return;
     }
 
-    setMessage("Generating… (this can take up to ~90s)");
+    // Single, non-duplicated message (no “if you purchased…” text)
+    setMessage("Generating your personalized report… (up to ~90s)");
 
     const res = await fetch("/api/results/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // ✅ userId is optional; still send for post-payment binding if session user_id is missing
       body: JSON.stringify({ sid: sidValue, userId: uid }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      const msg = String(data?.error || "Failed to complete the purchase");
       setStatus("error");
-      setError(msg);
+      setError(String(data?.error || "Failed to complete the purchase"));
       return;
     }
 
-    // ✅ If this was a top-up only purchase, go to My Results (credits page)
+    // If this was a top-up only purchase, go to My Results (credits)
     if (data?.topupOnly) {
       window.location.href = "/my-reports";
       return;
@@ -71,7 +71,7 @@ export default function SuccessPage() {
   };
 
   useEffect(() => {
-    // Remove hash fragments (avoid loop)
+    // Remove hash fragments (avoid loops)
     if (window.location.hash) {
       window.history.replaceState({}, "", window.location.pathname + window.location.search);
     }
@@ -104,21 +104,31 @@ export default function SuccessPage() {
 
   return (
     <main className="min-h-screen bg-white flex items-center justify-center p-8">
-      <div className="max-w-md w-full rounded-3xl border border-slate-200 bg-white p-7 space-y-4">
-        <div className="text-xl font-semibold text-slate-900">ResumeUp</div>
+      <div className="max-w-md w-full rounded-3xl border border-slate-200 bg-white p-7 space-y-5">
+        {/* Brand */}
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-slate-900" />
+          <div className="text-xl font-semibold text-slate-900">ResumeUp</div>
+        </div>
 
+        {/* Status message */}
         <div className="text-slate-700">{message}</div>
 
         {status === "generating" && (
-          <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
-            <div className="h-2 w-1/2 bg-slate-900 animate-pulse" />
+          <div className="space-y-3">
+            <div className="h-2 w-full rounded bg-slate-100 overflow-hidden">
+              <div className="h-2 w-1/2 bg-slate-900 animate-pulse" />
+            </div>
+            <div className="text-xs text-slate-500">
+              Please keep this tab open. You’ll be redirected automatically.
+            </div>
           </div>
         )}
 
         {status === "need_signin" && (
           <div className="space-y-3">
             <div className="text-sm text-slate-600">
-              Please sign in to attach this purchase to your account and apply credits.
+              Sign in to link this purchase to your account and apply credits.
             </div>
 
             <button
@@ -134,6 +144,10 @@ export default function SuccessPage() {
             >
               I already signed in — continue
             </button>
+
+            <div className="text-xs text-slate-500">
+              If the sign-in popup was blocked, allow popups and try again.
+            </div>
           </div>
         )}
 
@@ -143,8 +157,9 @@ export default function SuccessPage() {
           </div>
         )}
 
+        {/* Small footer hint */}
         <div className="text-xs text-slate-500">
-          You’ll be redirected to the generated report page.
+          After payment, we either (1) top up credits or (2) generate your report, depending on what you purchased.
         </div>
       </div>
     </main>
