@@ -1189,7 +1189,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <button
+                {/* <button
                   type="button"
                   onClick={handleUnlockClick}
                   className="rounded-2xl px-8 py-4 text-base font-semibold text-slate-950
@@ -1197,7 +1197,7 @@ export default function HomePage() {
           shadow-xl shadow-emerald-500/25 transition"
                 >
                   Unlock full rewrite - from $1
-                </button>
+                </button> */}
               </div>
 
               {/* Keyword gaps section */}
@@ -1261,19 +1261,45 @@ export default function HomePage() {
                   })}
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm text-slate-600">
+                <div className="mt-8 rounded-3xl border border-slate-200 bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-6 text-white">
+
+                  <div className="text-lg font-semibold">
                     Want the full rewrite + after-score improvement report?
                   </div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">
+
+                  <div className="mt-2 text-sm text-white/80">
                     Use credits to generate instantly — or top up in Pricing below.
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap items-center gap-4">
+                    {credits && credits > 0 ? (
+                      <button
+                        type="button"
+                        onClick={generateFullWithCredit}
+                        className="rounded-2xl px-10 py-4 text-base font-semibold text-slate-950
+        bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
+        shadow-xl shadow-emerald-500/25 transition"
+                      >
+                        Generate full report now (uses 1 credit)
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleUnlockClick}
+                        className="rounded-2xl px-10 py-4 text-base font-semibold text-slate-950
+        bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
+        shadow-xl shadow-emerald-500/25 transition"
+                      >
+                        Unlock full rewrite - from $1
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="text-xs text-slate-500">
+              {/* <div className="text-xs text-slate-500">
                 We don’t sell your data. No keyword stuffing. If a metric is unknown, we keep a TODO placeholder instead of inventing numbers.
-              </div>
+              </div> */}
             </div>
           )}
 
