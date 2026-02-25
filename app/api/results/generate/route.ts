@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import OpenAI from "openai";
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -24,129 +25,123 @@ async function waitForCredits(sb: any, userId: string, timeoutMs = 12000) {
   return 0;
 }
 
-function isTopupOnlySession(session: any) {
-  // ✅ topup-only: no resume/jd stored (purchase credits only)
-  const r = typeof session.resume_text === "string" ? session.resume_text.trim() : "";
-  const j = typeof session.jd_text === "string" ? session.jd_text.trim() : "";
-  return r.length < 200 || j.length < 200;
-}
-
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-
-    const sid = String(body?.sid ?? "");
-    // userId is OPTIONAL now (we prefer session.user_id)
-    const userIdFromBody = body?.userId ? String(body.userId) : "";
-
+    const { sid, userId } = await req.json();
     if (!sid) {
-      return NextResponse.json({ error: "Missing sid" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing sid" },
+        { status: 400 }
+      );
     }
 
     const sb = supabaseServer();
 
-    // 1) Load session (include context columns if you want later)
-    const { data: session, error: sessErr } = await sb
-      .from("checkout_sessions")
-      .select("id,status,resume_text,jd_text,result_json,user_id,credits")
-      .eq("id", sid)
-      .single();
+    // 1️⃣ 로그인 사용자 확인
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
 
-    if (sessErr || !session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 404 });
-    }
-
-    // Resolve user id
-    const resolvedUserId = String(session.user_id ?? userIdFromBody ?? "");
-
-    if (!resolvedUserId) {
+    if (!user) {
       return NextResponse.json(
-        { error: "Sign-in required to proceed." },
+        { error: "Sign-in required" },
         { status: 403 }
       );
     }
 
-    // 2) If already generated, reuse (do NOT spend again)
+
+
+    // 2️⃣ 세션 조회
+    const { data: session, error: sessErr } = await sb
+      .from("checkout_sessions")
+      .select("*")
+      .eq("id", sid)
+      .single();
+
+    if (sessErr || !session) {
+      return NextResponse.json(
+        { error: "Invalid session" },
+        { status: 404 }
+      );
+    }
+
+    // 이미 생성된 경우 → 재사용 (idempotent)
     if (session.status === "fulfilled" && session.result_json) {
-      return NextResponse.json({ ok: true, reused: true });
+      return NextResponse.json({
+        ok: true,
+        alreadyGenerated: true,
+      });
     }
 
-    // 3) Payment must be confirmed
-    if (session.status !== "paid" && session.status !== "fulfilled") {
-      return NextResponse.json({ error: "Payment not confirmed" }, { status: 403 });
+    // 3️⃣ 결제 완료 여부 확인
+    if (session.status !== "paid") {
+      return NextResponse.json(
+        { error: "Payment not confirmed" },
+        { status: 403 }
+      );
     }
 
-    // 4) Attach user_id if missing (post-payment binding)
-    if (!session.user_id) {
-      await sb.from("checkout_sessions").update({ user_id: resolvedUserId }).eq("id", sid);
+    // 4️⃣ 크레딧 대기 (웹훅 반영 대기)
+    const balance = await waitForCredits(sb, userId, 12000);
+
+    if (balance < 1) {
+      return NextResponse.json(
+        { error: "Insufficient credits" },
+        { status: 403 }
+      );
     }
 
-    // ✅ TOP-UP ONLY FLOW:
-    // If this session has no resume/jd (credit purchase only), do not spend credit, do not analyze.
-    if (isTopupOnlySession(session)) {
-      // wait for webhook to top up credits (prevents race)
-      await waitForCredits(sb, resolvedUserId, 12000);
-      // mark fulfilled so it doesn't keep trying
-      await sb.from("checkout_sessions").update({ status: "fulfilled" }).eq("id", sid);
-
-      return NextResponse.json({ ok: true, topupOnly: true });
-    }
-
-    // 5) Wait for credit top-up (prevents webhook race) - for paid flow
-    const bal = await waitForCredits(sb, resolvedUserId, 12000);
-    if (bal < 1) {
-      return NextResponse.json({ error: "Insufficient credits" }, { status: 403 });
-    }
-
-    // 6) Spend 1 credit atomically (RPC)
-    const { data: okSpend, error: spendErr } = await sb.rpc("spend_credit", {
-      p_user_id: resolvedUserId,
+    // 5️⃣ 크레딧 차감 (atomic)
+    const { error: spendErr } = await sb.rpc("spend_credit", {
+      uid: userId,
     });
 
     if (spendErr) {
-      return NextResponse.json({ error: "Credit spend failed" }, { status: 500 });
-    }
-    if (!okSpend) {
-      return NextResponse.json({ error: "Insufficient credits" }, { status: 403 });
-    }
-
-    // 7) Trigger full analyze (now analyze loads resume/jd + context from DB using sid)
-    const base = process.env.NEXT_PUBLIC_BASE_URL;
-    if (!base) {
       return NextResponse.json(
-        { error: "Server misconfigured: NEXT_PUBLIC_BASE_URL missing" },
+        { error: "Credit deduction failed" },
         { status: 500 }
       );
     }
 
-    const res = await fetch(`${base}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // ✅ Only sid + mode are needed (analyze pulls everything from DB in full mode)
-      body: JSON.stringify({
-        mode: "full",
-        sid,
-        resumeText: "", // not used in full (DB wins)
-        jdText: "",     // not used in full (DB wins)
-      }),
+    // 6️⃣ 실제 리포트 생성
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY!,
     });
 
-    const data = await res.json();
+    const rewriteResp = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content: "Rewrite the resume in a concise ATS-optimized format.",
+        },
+        {
+          role: "user",
+          content: session.resume_text + "\n\nJD:\n" + session.jd_text,
+        },
+      ],
+    });
 
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: data?.error || "Analyze failed" },
-        { status: 500 }
-      );
-    }
+    const rewrittenResume =
+      rewriteResp.choices[0].message.content || "";
 
-    // Ensure fulfilled
-    await sb.from("checkout_sessions").update({ status: "fulfilled" }).eq("id", sid);
+    // 7️⃣ 결과 저장
+    await sb
+      .from("checkout_sessions")
+      .update({
+        status: "fulfilled",
+        result_json: {
+          rewrittenResume,
+        },
+      })
+      .eq("id", sid);
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
+
+  } catch (err: any) {
     return NextResponse.json(
-      { error: e?.message ?? "Unknown error" },
+      { error: err?.message || "Server error" },
       { status: 500 }
     );
   }
