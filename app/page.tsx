@@ -1165,14 +1165,19 @@ export default function HomePage() {
 
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{error}</div>}
 
-          {/* preview report (kept concise here) */}
+
+          {/* preview report (Keyword gaps UI like screenshot) */}
           {(credits === null || credits === 0) && result && (
-            <div className="anim-fadeup rounded-3xl border border-slate-200 bg-white p-6 space-y-4">
+            <div className="anim-fadeup rounded-3xl border border-slate-200 bg-white p-6 space-y-6">
+              {/* Top summary row */}
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 rounded-full bg-slate-900 text-white flex items-center justify-center">
-                    <div className="text-xl font-semibold">{Number(result.overallBefore ?? result.atsScore ?? 0)}</div>
+                    <div className="text-xl font-semibold">
+                      {Number(result.overallBefore ?? result.atsScore ?? 0)}
+                    </div>
                   </div>
+
                   <div>
                     <div className="text-sm text-slate-500">ATS preview score</div>
                     <div className="text-xl font-semibold text-slate-900">
@@ -1181,23 +1186,6 @@ export default function HomePage() {
                     <div className="text-sm text-slate-600">
                       Missing keywords: <span className="font-semibold">{missingSummary}</span>
                     </div>
-                    {topMissing.length > 0 && (
-                      <div className="mt-4">
-                        <div className="text-sm font-semibold text-slate-900">
-                          Top missing keywords
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {topMissing.map((k) => (
-                            <span
-                              key={k}
-                              className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800"
-                            >
-                              {k}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1205,11 +1193,86 @@ export default function HomePage() {
                   type="button"
                   onClick={handleUnlockClick}
                   className="rounded-2xl px-8 py-4 text-base font-semibold text-slate-950
-                  bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
-                  shadow-xl shadow-emerald-500/25 transition"
+          bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-300 hover:to-teal-200
+          shadow-xl shadow-emerald-500/25 transition"
                 >
                   Unlock full rewrite - from $1
                 </button>
+              </div>
+
+              {/* Keyword gaps section */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <div className="text-lg font-semibold text-slate-900">Keyword gaps</div>
+                    <div className="text-sm text-slate-600">
+                      Missing keywords are the fastest way to increase your score.
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    The fastest way to increase your score.
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { title: "Required skills", items: result.gaps?.required_skills ?? [] },
+                    { title: "Tools", items: result.gaps?.tools ?? [] },
+                    { title: "Metrics", items: result.gaps?.metrics_keywords ?? [] },
+                    { title: "Soft skills", items: result.gaps?.soft_skills ?? [] },
+                  ].map((box) => {
+                    const items: string[] = (box.items as any[]).map((x) => String(x));
+                    return (
+                      <div
+                        key={box.title}
+                        className="rounded-2xl border border-slate-200 bg-white p-5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold text-slate-900">{box.title}</div>
+                          <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-800">
+                            Missing {items.length}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {items.length === 0 ? (
+                            <div className="text-sm text-slate-500">No missing keywords in this category.</div>
+                          ) : (
+                            <>
+                              {items.slice(0, 12).map((k) => (
+                                <span
+                                  key={k}
+                                  className="rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs text-rose-800"
+                                  title="Missing keyword"
+                                >
+                                  ✕ {k}
+                                </span>
+                              ))}
+                              {items.length > 12 && (
+                                <span className="text-xs text-slate-500">
+                                  +{items.length - 12} more
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="text-sm text-slate-600">
+                    Want the full rewrite + after-score improvement report?
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">
+                    Use credits to generate instantly — or top up in Pricing below.
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-500">
+                We don’t sell your data. No keyword stuffing. If a metric is unknown, we keep a TODO placeholder instead of inventing numbers.
               </div>
             </div>
           )}
