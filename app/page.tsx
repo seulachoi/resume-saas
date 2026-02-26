@@ -468,17 +468,6 @@ export default function HomePage() {
 
   const getCurrentUser = async () => await fetchServerUser();
 
-  const getCurrentUserWithRetry = async (tries = 6, delayMs = 350) => {
-    for (let i = 0; i < tries; i += 1) {
-      const user = await getCurrentUser();
-      if (user?.id) return user;
-      if (i < tries - 1) {
-        await new Promise((r) => setTimeout(r, delayMs));
-      }
-    }
-    return null;
-  };
-
   const signInWithGoogle = async (nextPath = "/") => {
     const supabase = supabaseBrowser();
 
@@ -748,7 +737,7 @@ export default function HomePage() {
         setUserId(localUser.id);
         return;
       }
-      const user = await getCurrentUserWithRetry();
+      const user = await getCurrentUser();
       setUserEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
     };

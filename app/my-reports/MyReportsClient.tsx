@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 const LS_RESUME_KEY = "resumeup_resumeText";
@@ -26,9 +26,6 @@ type CheckoutRow = {
 
 type AuthMeResponse = {
   user: { id: string; email: string | null } | null;
-};
-type CreditsResponse = {
-  balance: number;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -158,32 +155,7 @@ export default function MyReportsClient({
   rows: CheckoutRow[];
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [headerSignedIn, setHeaderSignedIn] = useState(signedIn);
-  const [headerCredits, setHeaderCredits] = useState(credits);
   const completedRows = useMemo(() => rows ?? [], [rows]);
-
-  useEffect(() => {
-    setHeaderSignedIn(signedIn);
-    setHeaderCredits(credits);
-  }, [signedIn, credits]);
-
-  useEffect(() => {
-    const syncHeader = async () => {
-      try {
-        const meRes = await fetch("/api/auth/me", { cache: "no-store" });
-        const me: AuthMeResponse = await meRes.json();
-        if (!meRes.ok || !me.user?.id) {
-          setHeaderSignedIn(false);
-          return;
-        }
-        setHeaderSignedIn(true);
-        const crRes = await fetch("/api/auth/credits", { cache: "no-store" });
-        const cr: CreditsResponse = await crRes.json();
-        if (crRes.ok) setHeaderCredits(Number(cr.balance ?? 0));
-      } catch { }
-    };
-    syncHeader();
-  }, []);
 
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
@@ -204,8 +176,6 @@ export default function MyReportsClient({
       localStorage.removeItem("resumeup_cached_user_id");
       localStorage.removeItem("resumeup_cached_user_email");
     } catch { }
-    setHeaderSignedIn(false);
-    setHeaderCredits(0);
     window.location.href = "/auth/logout?next=/";
   };
 
@@ -279,7 +249,7 @@ export default function MyReportsClient({
               My Reports
             </SecondaryButton>
 
-            {headerSignedIn ? (
+            {signedIn ? (
               <>
                 <button
                   type="button"
@@ -288,7 +258,7 @@ export default function MyReportsClient({
                 >
                   Credits
                   <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
-                    {headerCredits}
+                    {credits}
                   </span>
                   <span className="text-xs underline underline-offset-2">Top up</span>
                 </button>

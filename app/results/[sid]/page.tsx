@@ -1,5 +1,4 @@
 import ClientActions from "./ClientActions";
-import HeaderClient from "./HeaderClient";
 import { supabaseAuthServer, supabaseServer } from "@/lib/supabaseServer";
 
 function clamp(n: number, min = 0, max = 100) {
@@ -284,7 +283,45 @@ export default async function ResultsPage({
             <div className="font-semibold text-slate-900">ResumeUp</div>
           </a>
 
-          <HeaderClient initialSignedIn={Boolean(user?.id)} initialBalance={balance} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href="/my-reports"
+              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+            >
+              My Reports
+            </a>
+
+            {user?.id ? (
+              <>
+                {balance !== null && (
+                  <a
+                    href="/my-reports"
+                    className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                  >
+                    Credits
+                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
+                      {balance}
+                    </span>
+                    <span className="text-xs underline underline-offset-2">Top up</span>
+                  </a>
+                )}
+                <a
+                  href="/auth/logout?next=/"
+                  className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                >
+                  Sign out
+                </a>
+              </>
+            ) : (
+              <a
+                href="/"
+                className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+              >
+                Sign in
+              </a>
+            )}
+
+          </div>
         </div>
       </header>
 

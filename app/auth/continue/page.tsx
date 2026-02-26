@@ -27,19 +27,9 @@ export default function AuthContinuePage() {
           return;
         }
 
-        let userId: string | null = null;
-        for (let i = 0; i < 10; i += 1) {
-          try {
-            const meRes = await fetch("/api/auth/me", { cache: "no-store" });
-            const me: AuthMeResponse = await meRes.json();
-            if (me.user?.id) {
-              userId = me.user.id;
-              break;
-            }
-          } catch { }
-          await new Promise((r) => setTimeout(r, 300));
-        }
-        if (!userId) {
+        const meRes = await fetch("/api/auth/me", { cache: "no-store" });
+        const me: AuthMeResponse = await meRes.json();
+        if (!me.user?.id) {
           window.location.href = "/";
           return;
         }
