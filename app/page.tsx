@@ -873,7 +873,7 @@ export default function HomePage() {
               </div>
             ) : (
               <button
-                onClick={signInWithGoogle}
+                onClick={() => signInWithGoogle()}
                 className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
               >
                 Sign in
