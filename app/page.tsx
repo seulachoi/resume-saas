@@ -560,8 +560,6 @@ export default function HomePage() {
       return;
     }
 
-    const uid = user.id;
-
     // 2) create route가 200자 검증을 걸고 있으니, top-up이라도 더미 텍스트로 통과
     const dummy = "Top-up only. ".repeat(30); // 약 360자
     const safeResume = resumeText && resumeText.length >= 200 ? resumeText : dummy;
@@ -587,7 +585,6 @@ export default function HomePage() {
           jdText: safeJd,
           atsBefore: result?.atsScore ?? 0,
           variantId,
-          userId: uid,
           track,
           seniority,
           topupOnly: true, // create route에서 무시해도 OK

@@ -138,6 +138,17 @@ export default async function ResultsPage({
   const user = authData.user ?? null;
   const userEmail = user?.email ?? null;
 
+  if (!user?.id) {
+    return (
+      <main className="min-h-screen bg-white p-10">
+        <div className="mx-auto max-w-3xl">
+          <h1 className="text-2xl font-semibold text-slate-900">Sign in required</h1>
+          <p className="mt-2 text-slate-600">Please sign in to view this report.</p>
+        </div>
+      </main>
+    );
+  }
+
   const sb = supabaseServer();
 
   // credits
@@ -155,7 +166,8 @@ export default async function ResultsPage({
     .from("checkout_sessions")
     .select("status, result_json, ats_before, ats_after, created_at")
     .eq("id", sid)
-    .single();
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   if (error) {
     return (
@@ -174,7 +186,7 @@ export default async function ResultsPage({
       <main className="min-h-screen bg-white p-10">
         <div className="mx-auto max-w-3xl">
           <h1 className="text-2xl font-semibold text-slate-900">Result not found</h1>
-          <p className="mt-2 text-slate-600">Invalid link or expired session.</p>
+          <p className="mt-2 text-slate-600">Invalid link, expired session, or access denied.</p>
           <p className="mt-2 text-xs text-slate-500 font-mono">sid: {sid}</p>
         </div>
       </main>

@@ -7,6 +7,12 @@ type CheckoutRow = {
   created_at: string;
   ats_before: number | null;
   ats_after: number | null;
+  result_json: {
+    overall_before?: number;
+    overall_after?: number;
+    ats_before?: number;
+    ats_after?: number;
+  } | null;
   report_title: string | null;
   target_track: string | null;
   target_seniority: string | null;
@@ -42,7 +48,7 @@ export default async function MyReportsPage() {
   const { data: rowsRaw } = await db
     .from("checkout_sessions")
     .select(
-      "id,status,created_at,ats_before,ats_after,report_title,target_track,target_seniority,resume_text,jd_text"
+      "id,status,created_at,ats_before,ats_after,result_json,report_title,target_track,target_seniority,resume_text,jd_text"
     )
     .eq("user_id", user.id)
     .eq("status", "fulfilled")

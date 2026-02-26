@@ -16,6 +16,12 @@ type CheckoutRow = {
   created_at: string;
   ats_before: number | null;
   ats_after: number | null;
+  result_json: {
+    overall_before?: number;
+    overall_after?: number;
+    ats_before?: number;
+    ats_after?: number;
+  } | null;
   report_title: string | null;
   target_track: string | null;
   target_seniority: string | null;
@@ -183,9 +189,6 @@ export default function MyReportsClient({
     window.location.href = "/#analyzer";
   };
 
-  // ✅ secure: we do NOT read DB here. We just start checkout.
-  // If your /api/checkout/create currently requires userId, keep it as-is for now,
-  // but the recommended secure next step is: server should derive user from cookie.
   const topUpCreditsNow = async (variantId = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
     if (!signedIn) {
@@ -196,8 +199,7 @@ export default function MyReportsClient({
     try {
       const meRes = await fetch("/api/auth/me", { cache: "no-store" });
       const meJson: AuthMeResponse = await meRes.json();
-      const uid = meJson.user?.id ?? null;
-      if (!uid) {
+      if (!meJson.user?.id) {
         await signInWithGoogle();
         return;
       }
@@ -208,7 +210,6 @@ export default function MyReportsClient({
         body: JSON.stringify({
           topupOnly: true,
           variantId,
-          userId: uid, // (next step: remove and let server read cookie)
         }),
       });
 
@@ -342,8 +343,14 @@ export default function MyReportsClient({
             {completedRows.length > 0 && (
               <div className="grid grid-cols-1 gap-4">
                 {completedRows.map((r) => {
-                  const before = r.ats_before;
-                  const after = r.ats_after;
+                  const beforeFromJson = Number(
+                    r.result_json?.overall_before ?? r.result_json?.ats_before ?? NaN
+                  );
+                  const afterFromJson = Number(
+                    r.result_json?.overall_after ?? r.result_json?.ats_after ?? NaN
+                  );
+                  const before = Number.isFinite(beforeFromJson) ? beforeFromJson : r.ats_before;
+                  const after = Number.isFinite(afterFromJson) ? afterFromJson : r.ats_after;
                   const hasScores = before !== null && after !== null;
                   const delta = hasScores ? after! - before! : null;
 
