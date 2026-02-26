@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { supabaseAuthServer, supabaseServer } from "@/lib/supabaseServer";
 import { v4 as uuidv4 } from "uuid";
 import type { Track, Seniority } from "@/lib/prompts";
 
@@ -42,15 +42,17 @@ export async function POST(req: Request) {
     const resumeText = String(body?.resumeText ?? "");
     const jdText = String(body?.jdText ?? "");
     const atsBefore = Number(body?.atsBefore ?? 0);
-    const userId = String(body?.userId ?? "");
-
     // ✅ NEW: context from UI
     const track: Track = isTrack(body?.track) ? body.track : "product_manager";
     const seniority: Seniority = isSeniority(body?.seniority) ? body.seniority : "mid";
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    const auth = await supabaseAuthServer();
+    const { data: authData } = await auth.auth.getUser();
+    const user = authData.user ?? null;
+    if (!user) {
+      return NextResponse.json({ error: "Sign-in required" }, { status: 403 });
     }
+    const userId = user.id;
 
     if (resumeText.length < 200 || jdText.length < 200) {
       return NextResponse.json(

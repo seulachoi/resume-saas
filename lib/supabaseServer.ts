@@ -43,9 +43,16 @@ export async function supabaseAuthServer() {
         return cookieStore.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, options);
-        });
+        // ✅ Server Component에서는 쿠키를 set할 수 없으므로
+        // 읽기 전용으로만 사용 (middleware나 route handler에서만 set 가능)
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch (error) {
+          // Server Component에서 호출 시 무시
+          // Route Handler나 Middleware에서만 쿠키 설정 가능
+        }
       },
     },
   });

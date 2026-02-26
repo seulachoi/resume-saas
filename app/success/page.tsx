@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 type Status = "loading" | "need_signin" | "generating" | "error";
+type AuthMeResponse = {
+  user: { id: string; email: string | null } | null;
+};
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -17,12 +20,17 @@ export default function SuccessPage() {
 
   // Wait for a user session (prevents OAuth loop)
   const waitForUser = async (maxMs = 7000) => {
-    const supabase = supabaseBrowser();
     const start = Date.now();
 
     while (Date.now() - start < maxMs) {
-      const { data } = await supabase.auth.getUser();
-      const uid = data.user?.id ?? null;
+      let uid: string | null = null;
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        const data: AuthMeResponse = await res.json();
+        uid = data.user?.id ?? null;
+      } catch {
+        uid = null;
+      }
       if (uid) return uid;
       await sleep(400);
     }
@@ -49,7 +57,7 @@ export default function SuccessPage() {
     const res = await fetch("/api/results/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sid: sidValue, userId: uid }),
+      body: JSON.stringify({ sid: sidValue }),
     });
 
     const data = await res.json();

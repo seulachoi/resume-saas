@@ -5,7 +5,8 @@ import { cookies } from "next/headers";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/";
+  const rawNext = url.searchParams.get("next") ?? "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
   // ✅ redirect response를 먼저 만들고, 여기에 쿠키를 “응답으로” 심습니다.
   const redirectUrl = new URL(next, url.origin);

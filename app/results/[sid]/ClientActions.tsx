@@ -66,14 +66,10 @@ export default function ClientActions({
                 onClick={() => {
                     window.location.href = "/#analyzer";
                 }}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                className="rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-400 to-teal-300 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-emerald-500/25 hover:brightness-105"
             >
                 Analyze again
             </button>
-
-            <span className="text-xs text-slate-500">
-                (Works for rewritten resume only)
-            </span>
         </div>
     );
 }

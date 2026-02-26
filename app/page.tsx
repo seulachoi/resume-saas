@@ -5,6 +5,13 @@ import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import type { Track, Seniority } from "@/lib/prompts";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
+type AuthMeResponse = {
+  user: { id: string; email: string | null } | null;
+};
+type CreditsResponse = {
+  balance: number;
+};
+
 /** ===================== LocalStorage Keys ===================== */
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
@@ -58,6 +65,31 @@ function useInViewOnce<T extends Element>(threshold = 0.25) {
   }, [seen, threshold, ref]);
 
   return { ref, seen };
+}
+
+function useInViewLoop<T extends Element>(threshold = 0.25) {
+  const [inView, setInView] = useState(false);
+  const [enterCount, setEnterCount] = useState(0);
+  const ref = useState<React.RefObject<T>>(() => ({ current: null } as any))[0];
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.some((e) => e.isIntersecting);
+        setInView(visible);
+        if (visible) setEnterCount((n) => n + 1);
+      },
+      { threshold }
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, [threshold, ref]);
+
+  return { ref, inView, enterCount };
 }
 
 function AnimatedRing({
@@ -168,13 +200,18 @@ function AnimatedBar({
 function WhyResumeUpSection() {
   const s = useInViewOnce<HTMLDivElement>(0.25);
   const start = s.seen;
+  const kw = useInViewLoop<HTMLDivElement>(0.45);
 
   const [kwOn, setKwOn] = useState(false);
   useEffect(() => {
-    if (!start) return;
-    const t = setTimeout(() => setKwOn(true), 700);
+    if (!kw.inView) {
+      setKwOn(false);
+      return;
+    }
+    setKwOn(false);
+    const t = setTimeout(() => setKwOn(true), 220);
     return () => clearTimeout(t);
-  }, [start]);
+  }, [kw.enterCount, kw.inView]);
 
   return (
     <section ref={s.ref} className="bg-slate-50 py-20">
@@ -310,7 +347,7 @@ function WhyResumeUpSection() {
 
         {/* Keyword intelligence */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8">
+          <div ref={kw.ref} className="rounded-3xl border border-slate-200 bg-white p-8">
             <div className="text-sm text-slate-500 font-semibold">Keyword intelligence</div>
             <div className="mt-2 text-2xl font-semibold text-slate-900">Fill gaps naturally (no stuffing)</div>
             <div className="mt-2 text-slate-600">
@@ -416,57 +453,125 @@ export default function HomePage() {
     "1332798": 10,
   };
 
-  const signInWithGoogle = async () => {
-    const supabase = supabaseBrowser();
-  
-    // ✅ next 경로는 localStorage로 전달 (redirectTo query 제거)
+  const fetchServerUser = async () => {
     try {
-      localStorage.setItem("resumeup_oauth_next", "/");
-    } catch {}
-  
+      const res = await fetch("/api/auth/me", {
+        cache: "no-store",
+      });
+      const data: AuthMeResponse = await res.json();
+      if (!res.ok) return null;
+      return data.user;
+    } catch {
+      return null;
+    }
+  };
+
+  const getCurrentUser = async () => await fetchServerUser();
+
+  const getCurrentUserWithRetry = async (tries = 6, delayMs = 350) => {
+    for (let i = 0; i < tries; i += 1) {
+      const user = await getCurrentUser();
+      if (user?.id) return user;
+      if (i < tries - 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    return null;
+  };
+
+  const signInWithGoogle = async (nextPath = "/") => {
+    const supabase = supabaseBrowser();
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
       },
     });
   };
 
   const signOut = async () => {
     const supabase = supabaseBrowser();
-    await supabase.auth.signOut();
+    setUserEmail(null);
+    setUserId(null);
+    setCredits(null);
+    try {
+      await supabase.auth.signOut();
+    } catch { }
+    window.location.href = "/auth/logout?next=/";
   };
 
   const refreshCredits = async () => {
-    const supabase = supabaseBrowser();
-    const { data } = await supabase.auth.getSession();
-    const uid = data.session?.user?.id ?? null;
-
-    if (!uid) {
+    const user = await getCurrentUser();
+    if (!user) {
       setCredits(null);
       return;
     }
+    try {
+      const res = await fetch("/api/auth/credits", { cache: "no-store" });
+      const data: CreditsResponse = await res.json();
+      if (!res.ok) {
+        setCredits(null);
+        return;
+      }
+      setCredits(Number(data.balance ?? 0));
+    } catch {
+      setCredits(null);
+    }
+  };
 
-    const { data: cRow } = await supabase.from("user_credits").select("balance").eq("user_id", uid).single();
-    setCredits(Number(cRow?.balance ?? 0));
+  const getCurrentBalance = async () => {
+    const user = await getCurrentUser();
+    if (!user) return null;
+    try {
+      const res = await fetch("/api/auth/credits", { cache: "no-store" });
+      const data: CreditsResponse = await res.json();
+      if (!res.ok) return null;
+      const bal = Number(data.balance ?? 0);
+      setCredits(bal);
+      return bal;
+    } catch {
+      return null;
+    }
+  };
+
+  const startFullWithCredit = async () => {
+    const resumeForSession = resumeText || localStorage.getItem(LS_RESUME_KEY) || "";
+    const jdForSession = jdText || localStorage.getItem(LS_JD_KEY) || "";
+
+    const res = await fetch("/api/credit-session/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resumeText: resumeForSession,
+        jdText: jdForSession,
+        atsBefore: result?.atsScore ?? 0,
+        track,
+        seniority,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Failed to create credit session");
+    window.location.href = `/success?sid=${encodeURIComponent(data.sid)}`;
   };
 
   // ✅ Top up credits: logout -> login -> Lemon checkout, login -> Lemon checkout
   const topUpCreditsNow = async (variantId: string = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
-
-    const supabase = supabaseBrowser();
-    const { data } = await supabase.auth.getSession();
-    const uid = data.session?.user?.id ?? null;
+    const user = await getCurrentUser();
 
     // 1) 비로그인: 로그인 먼저 → 로그인 후 바로 결제 이어가기
-    if (!uid) {
+    if (!user) {
       try {
         localStorage.setItem("resumeup_post_login_topup_variant", variantId);
+        localStorage.setItem("resumeup_post_login_checkout_mode", "topup");
       } catch { }
-      await signInWithGoogle();
+      await signInWithGoogle("/auth/continue");
       return;
     }
+
+    const uid = user.id;
 
     // 2) create route가 200자 검증을 걸고 있으니, top-up이라도 더미 텍스트로 통과
     const dummy = "Top-up only. ".repeat(30); // 약 360자
@@ -510,50 +615,69 @@ export default function HomePage() {
     }
   };
 
-  // ✅ "Unlock full rewrite" just means: top up credits (from $1)
+  // ✅ Start paid analysis checkout (login -> Lemon -> success -> full report)
   const handleUnlockClick = async () => {
     setError(null);
-    await topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID);
+    const user = await getCurrentUser();
+    if (!user) {
+      try {
+        localStorage.setItem("resumeup_post_login_topup_variant", DEFAULT_TOPUP_VARIANT_ID);
+        localStorage.setItem("resumeup_post_login_checkout_mode", "analysis");
+      } catch { }
+      await signInWithGoogle("/auth/continue");
+      return;
+    }
+
+    try {
+      const balance = await getCurrentBalance();
+      const effectiveBalance = balance ?? (typeof credits === "number" ? credits : 0);
+      if (effectiveBalance > 0) {
+        await startFullWithCredit();
+        return;
+      }
+
+      const resumeForCheckout = resumeText || localStorage.getItem(LS_RESUME_KEY) || "";
+      const jdForCheckout = jdText || localStorage.getItem(LS_JD_KEY) || "";
+      const res = await fetch("/api/checkout/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeText: resumeForCheckout,
+          jdText: jdForCheckout,
+          atsBefore: result?.atsScore ?? 0,
+          variantId: DEFAULT_TOPUP_VARIANT_ID,
+          track,
+          seniority,
+          topupOnly: false,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Checkout creation failed");
+      window.location.href = json.checkoutUrl;
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to start checkout");
+    }
   };
 
   const generateFullWithCredit = async () => {
     setError(null);
-
-    const supabase = supabaseBrowser();
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id ?? null;
-
-    if (!userId) {
+    const user = await getCurrentUser();
+    if (!user?.id) {
       setError("Please sign in to generate a full report and use credits.");
       return;
     }
-
-    if (!credits || credits < 1) {
+    const balance = await getCurrentBalance();
+    if (balance === null || balance < 1) {
       setModalReason("insufficient");
       setShowBundleModal(true);
       return;
     }
-
-    const res = await fetch("/api/credit-session/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        resumeText,
-        jdText,
-        atsBefore: result?.atsScore ?? 0,
-        userId,
-        track,
-        seniority,
-      }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data?.error || "Failed to create credit session");
-      return;
+    try {
+      await startFullWithCredit();
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to create credit session");
     }
-
-    window.location.href = `/success?sid=${encodeURIComponent(data.sid)}`;
   };
 
   const runPreview = async () => {
@@ -592,6 +716,7 @@ export default function HomePage() {
       const s = localStorage.getItem(LS_SENIORITY_KEY);
       if (t && TRACKS.some((x) => x.key === (t as any))) setTrack(t as any);
       if (s && SENIORITIES.some((x) => x.key === (s as any))) setSeniority(s as any);
+
     } catch { }
   }, []);
 
@@ -617,24 +742,47 @@ export default function HomePage() {
 
     const syncSession = async () => {
       const { data } = await supabase.auth.getSession();
-      const s = data.session ?? null;
-      setUserEmail(s?.user?.email ?? null);
-      setUserId(s?.user?.id ?? null);
+      const localUser = data.session?.user ?? null;
+      if (localUser?.id) {
+        setUserEmail(localUser.email ?? null);
+        setUserId(localUser.id);
+        return;
+      }
+      const user = await getCurrentUserWithRetry();
+      setUserEmail(user?.email ?? null);
+      setUserId(user?.id ?? null);
     };
 
     syncSession();
 
     const { data: sub } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
-        setUserEmail(session?.user?.email ?? null);
-        setUserId(session?.user?.id ?? null);
+        if (event === "SIGNED_OUT") {
+          setUserEmail(null);
+          setUserId(null);
+          return;
+        }
 
-        // 로그인 직후: “top up 클릭→로그인→바로 결제” 이어가기
+        if (session?.user?.id) {
+          setUserEmail(session.user.email ?? null);
+          setUserId(session.user.id);
+        } else {
+          // Cookie session can exist even when local session is null.
+          await syncSession();
+        }
+
+        // 로그인 직후: "top up 클릭→로그인→바로 결제" 이어가기
         if (event === "SIGNED_IN") {
           const v = localStorage.getItem("resumeup_post_login_topup_variant");
           if (v) {
             localStorage.removeItem("resumeup_post_login_topup_variant");
-            setTimeout(() => topUpCreditsNow(v), 200);
+            const mode = localStorage.getItem("resumeup_post_login_checkout_mode") || "topup";
+            localStorage.removeItem("resumeup_post_login_checkout_mode");
+            if (mode === "analysis") {
+              setTimeout(() => handleUnlockClick(), 200);
+            } else {
+              setTimeout(() => topUpCreditsNow(v), 200);
+            }
           }
         }
       }
@@ -716,22 +864,14 @@ export default function HomePage() {
                 {credits !== null && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (credits === 0) topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID);
-                    }}
-                    className={[
-                      "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
-                      credits === 0
-                        ? "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100"
-                        : "bg-slate-900 border-slate-200 text-white",
-                    ].join(" ")}
-                    title={credits === 0 ? "Click to top up credits" : undefined}
+                    onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
+                    className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
                   >
                     Credits
-                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white/10 px-2">
+                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
                       {credits}
                     </span>
-                    {credits === 0 && <span className="ml-1 text-xs underline underline-offset-2">Top up</span>}
+                    <span className="text-xs underline underline-offset-2">Top up</span>
                   </button>
                 )}
 
@@ -761,15 +901,15 @@ export default function HomePage() {
 
         <div className="mx-auto max-w-6xl px-6 py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative">
           <div className="space-y-6">
-            <h1 className="text-5xl md:text-6xl font-semibold leading-tight tracking-tight">
+            <h1 className="text-4xl md:text-5xl font-semibold leading-tight tracking-tight">
               Improve your resume
               <br />
-              with a <span className="text-emerald-400">score-first</span> report
+              with a <span className="text-emerald-400">personalized, score-first report</span>
             </h1>
 
             <p className="text-lg text-white/75 max-w-xl">
-              Paste your resume + job description. Get an ATS-style score preview and keyword gap report. Unlock the full
-              rewrite and after-score improvement report.
+              Paste your resume + job description. Get an ATS-style score preview and keyword gap analysis, then unlock a
+              personalized full rewrite and after-score improvement report tailored to your target role.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -981,7 +1121,9 @@ export default function HomePage() {
           <div className="anim-fadeup space-y-8">
             <div>
               <h2 className="text-4xl font-semibold leading-tight">
-                Improve your resume <span className="text-emerald-500">in 3 simple steps</span>
+                Improve your resume
+                <br />
+                <span className="text-emerald-500">in 3 simple steps</span>
               </h2>
               <p className="mt-4 text-slate-600 max-w-xl">
                 You’ll see your score and gaps first — then generate a recruiter-grade rewrite with after-score improvements.

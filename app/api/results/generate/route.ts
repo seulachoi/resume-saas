@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
-import OpenAI from "openai";
+import { supabaseAuthServer, supabaseServer } from "@/lib/supabaseServer";
+import { POST as analyzePost } from "@/app/api/analyze/route";
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -27,7 +27,7 @@ async function waitForCredits(sb: any, userId: string, timeoutMs = 12000) {
 
 export async function POST(req: Request) {
   try {
-    const { sid, userId } = await req.json();
+    const { sid } = await req.json();
     if (!sid) {
       return NextResponse.json(
         { error: "Missing sid" },
@@ -36,11 +36,12 @@ export async function POST(req: Request) {
     }
 
     const sb = supabaseServer();
+    const auth = await supabaseAuthServer();
 
     // 1️⃣ 로그인 사용자 확인
     const {
       data: { user },
-    } = await sb.auth.getUser();
+    } = await auth.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
+    const userId = user.id;
 
 
 
@@ -56,6 +58,7 @@ export async function POST(req: Request) {
       .from("checkout_sessions")
       .select("*")
       .eq("id", sid)
+      .eq("user_id", userId)
       .single();
 
     if (sessErr || !session) {
@@ -81,61 +84,77 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4️⃣ 크레딧 대기 (웹훅 반영 대기)
-    const balance = await waitForCredits(sb, userId, 12000);
-
-    if (balance < 1) {
-      return NextResponse.json(
-        { error: "Insufficient credits" },
-        { status: 403 }
-      );
+    // top-up only purchase: no report generation
+    const hasResume = typeof session.resume_text === "string" && session.resume_text.length >= 200;
+    const hasJd = typeof session.jd_text === "string" && session.jd_text.length >= 200;
+    if (!hasResume || !hasJd) {
+      return NextResponse.json({ ok: true, topupOnly: true });
     }
 
-    // 5️⃣ 크레딧 차감 (atomic)
-    const { error: spendErr } = await sb.rpc("spend_credit", {
-      uid: userId,
-    });
+    // credit-session flow already deducted 1 credit at session creation time.
+    // checkout flow (credits > 0 from paid package) should deduct 1 here.
+    const alreadyCharged = Number(session.credits ?? 0) === 0;
+    if (!alreadyCharged) {
+      // 4️⃣ 크레딧 대기 (웹훅 반영 대기)
+      const balance = await waitForCredits(sb, userId, 12000);
 
-    if (spendErr) {
-      return NextResponse.json(
-        { error: "Credit deduction failed" },
-        { status: 500 }
-      );
+      if (balance < 1) {
+        return NextResponse.json(
+          { error: "Insufficient credits" },
+          { status: 403 }
+        );
+      }
+
+      // 5️⃣ 크레딧 차감
+      const { data: creditRow, error: creditErr } = await sb
+        .from("user_credits")
+        .select("balance")
+        .eq("user_id", userId)
+        .single();
+      if (creditErr) {
+        return NextResponse.json(
+          { error: "Credit deduction failed" },
+          { status: 500 }
+        );
+      }
+      const current = Number(creditRow?.balance ?? 0);
+      if (current < 1) {
+        return NextResponse.json(
+          { error: "Insufficient credits" },
+          { status: 403 }
+        );
+      }
+      const { error: decErr } = await sb
+        .from("user_credits")
+        .update({ balance: current - 1 })
+        .eq("user_id", userId);
+      if (decErr) {
+        return NextResponse.json(
+          { error: "Credit deduction failed" },
+          { status: 500 }
+        );
+      }
     }
 
-    // 6️⃣ 실제 리포트 생성
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY!,
+    // 6️⃣ 실제 리포트 생성 (full analyze pipeline with scores + context)
+    const analyzeReq = new Request("http://localhost/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "full", sid }),
     });
+    const analyzeRes = await analyzePost(analyzeReq);
+    const analyzeBody = await analyzeRes.json();
 
-    const rewriteResp = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content: "Rewrite the resume in a concise ATS-optimized format.",
-        },
-        {
-          role: "user",
-          content: session.resume_text + "\n\nJD:\n" + session.jd_text,
-        },
-      ],
-    });
-
-    const rewrittenResume =
-      rewriteResp.choices[0].message.content || "";
-
-    // 7️⃣ 결과 저장
-    await sb
-      .from("checkout_sessions")
-      .update({
-        status: "fulfilled",
-        result_json: {
-          rewrittenResume,
-        },
-      })
-      .eq("id", sid);
+    if (!analyzeRes.ok) {
+      await sb.rpc("add_credits", {
+        p_user_id: userId,
+        p_amount: 1,
+      });
+      return NextResponse.json(
+        { error: analyzeBody?.error || "Report generation failed" },
+        { status: analyzeRes.status || 500 }
+      );
+    }
 
     return NextResponse.json({ ok: true });
 

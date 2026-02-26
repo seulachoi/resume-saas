@@ -1,5 +1,6 @@
 import ClientActions from "./ClientActions";
-import { supabaseServer } from "@/lib/supabaseServer";
+import HeaderClient from "./HeaderClient";
+import { supabaseAuthServer, supabaseServer } from "@/lib/supabaseServer";
 
 function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : 0));
@@ -133,12 +134,12 @@ export default async function ResultsPage({
     );
   }
 
-  const sb = supabaseServer();
-
-  // auth user (server)
-  const { data: authData } = await sb.auth.getUser();
+  const auth = await supabaseAuthServer();
+  const { data: authData } = await auth.auth.getUser();
   const user = authData.user ?? null;
   const userEmail = user?.email ?? null;
+
+  const sb = supabaseServer();
 
   // credits
   let balance: number | null = null;
@@ -283,39 +284,7 @@ export default async function ResultsPage({
             <div className="font-semibold text-slate-900">ResumeUp</div>
           </a>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href="/my-reports"
-              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
-            >
-              My Reports
-            </a>
-
-            {balance !== null && (
-              <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
-                Credits
-                <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white/10 px-2 text-white">
-                  {balance}
-                </span>
-              </span>
-            )}
-
-            {!userEmail && (
-              <a
-                href="/#analyzer"
-                className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
-              >
-                Sign in
-              </a>
-            )}
-
-            <a
-              href="/#analyzer"
-              className="text-sm px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
-            >
-              New analysis
-            </a>
-          </div>
+          <HeaderClient initialSignedIn={Boolean(user?.id)} initialBalance={balance} />
         </div>
       </header>
 
@@ -329,9 +298,11 @@ export default async function ResultsPage({
               <div className="text-sm text-slate-600 max-w-3xl">{subline}</div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Pill>{trackLabel}</Pill>
-              <Pill>{seniorityLabel}</Pill>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <Pill>{trackLabel}</Pill>
+                <Pill>{seniorityLabel}</Pill>
+              </div>
             </div>
           </div>
         </section>

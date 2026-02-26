@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { supabaseAuthServer, supabaseServer } from "@/lib/supabaseServer";
+import type { Track, Seniority } from "@/lib/prompts";
 
 function inferReportTitle(jdText: string) {
   const lines = String(jdText || "")
@@ -16,6 +17,23 @@ function inferReportTitle(jdText: string) {
   return candidate.slice(0, 60);
 }
 
+function isTrack(x: any): x is Track {
+  return [
+    "product_manager",
+    "strategy_bizops",
+    "data_analytics",
+    "engineering",
+    "marketing_growth",
+    "sales_bd",
+    "design_ux",
+    "operations_program",
+  ].includes(String(x));
+}
+
+function isSeniority(x: any): x is Seniority {
+  return ["entry", "mid", "senior"].includes(String(x));
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -24,15 +42,19 @@ export async function POST(req: Request) {
     const jdText = String(body?.jdText ?? "");
     const atsBefore = Number(body?.atsBefore ?? 0);
     const variantId = String(body?.variantId ?? "");
-    const userId = String(body?.userId ?? "");
-
+    const track: Track = isTrack(body?.track) ? body.track : "product_manager";
+    const seniority: Seniority = isSeniority(body?.seniority) ? body.seniority : "mid";
     // ✅ top-up only mode:
     // - explicit flag OR empty resume/jd from My Results
     const topupOnly = Boolean(body?.topupOnly) || (resumeText.length === 0 && jdText.length === 0);
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    const auth = await supabaseAuthServer();
+    const { data: authData } = await auth.auth.getUser();
+    const user = authData.user ?? null;
+    if (!user) {
+      return NextResponse.json({ error: "Sign-in required" }, { status: 403 });
     }
+    const userId = user.id;
 
     if (!variantId) {
       return NextResponse.json({ error: "Missing variantId" }, { status: 400 });
@@ -73,6 +95,8 @@ export async function POST(req: Request) {
         ats_before: topupOnly ? 0 : atsBefore,
         credits,
         report_title: reportTitle,
+        target_track: topupOnly ? null : track,
+        target_seniority: topupOnly ? null : seniority,
       })
       .select("id")
       .single();

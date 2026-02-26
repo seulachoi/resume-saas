@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 const LS_RESUME_KEY = "resumeup_resumeText";
@@ -22,6 +22,13 @@ type CheckoutRow = {
   resume_text: string | null;
   jd_text: string | null;
   status: string | null;
+};
+
+type AuthMeResponse = {
+  user: { id: string; email: string | null } | null;
+};
+type CreditsResponse = {
+  balance: number;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -151,7 +158,32 @@ export default function MyReportsClient({
   rows: CheckoutRow[];
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [headerSignedIn, setHeaderSignedIn] = useState(signedIn);
+  const [headerCredits, setHeaderCredits] = useState(credits);
   const completedRows = useMemo(() => rows ?? [], [rows]);
+
+  useEffect(() => {
+    setHeaderSignedIn(signedIn);
+    setHeaderCredits(credits);
+  }, [signedIn, credits]);
+
+  useEffect(() => {
+    const syncHeader = async () => {
+      try {
+        const meRes = await fetch("/api/auth/me", { cache: "no-store" });
+        const me: AuthMeResponse = await meRes.json();
+        if (!meRes.ok || !me.user?.id) {
+          setHeaderSignedIn(false);
+          return;
+        }
+        setHeaderSignedIn(true);
+        const crRes = await fetch("/api/auth/credits", { cache: "no-store" });
+        const cr: CreditsResponse = await crRes.json();
+        if (crRes.ok) setHeaderCredits(Number(cr.balance ?? 0));
+      } catch { }
+    };
+    syncHeader();
+  }, []);
 
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
@@ -165,8 +197,16 @@ export default function MyReportsClient({
 
   const signOut = async () => {
     const supabase = supabaseBrowser();
-    await supabase.auth.signOut();
-    window.location.href = "/";
+    try {
+      await supabase.auth.signOut();
+    } catch { }
+    try {
+      localStorage.removeItem("resumeup_cached_user_id");
+      localStorage.removeItem("resumeup_cached_user_email");
+    } catch { }
+    setHeaderSignedIn(false);
+    setHeaderCredits(0);
+    window.location.href = "/auth/logout?next=/";
   };
 
   const goAnalyzer = () => {
@@ -184,9 +224,9 @@ export default function MyReportsClient({
     }
 
     try {
-      const supabase = supabaseBrowser();
-      const { data } = await supabase.auth.getUser();
-      const uid = data.user?.id ?? null;
+      const meRes = await fetch("/api/auth/me", { cache: "no-store" });
+      const meJson: AuthMeResponse = await meRes.json();
+      const uid = meJson.user?.id ?? null;
       if (!uid) {
         await signInWithGoogle();
         return;
@@ -235,21 +275,25 @@ export default function MyReportsClient({
           </a>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {signedIn && (
-              <span className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900">
-                Credits
-                <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
-                  {credits}
-                </span>
-              </span>
-            )}
-
             <SecondaryButton href="/my-reports" className="border-slate-900 text-slate-900">
-              My Results
+              My Reports
             </SecondaryButton>
 
-            {signedIn ? (
-              <SecondaryButton onClick={signOut}>Sign out</SecondaryButton>
+            {headerSignedIn ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
+                  className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                >
+                  Credits
+                  <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
+                    {headerCredits}
+                  </span>
+                  <span className="text-xs underline underline-offset-2">Top up</span>
+                </button>
+                <SecondaryButton onClick={signOut}>Sign out</SecondaryButton>
+              </>
             ) : (
               <PrimaryButton onClick={signInWithGoogle}>Sign in</PrimaryButton>
             )}
