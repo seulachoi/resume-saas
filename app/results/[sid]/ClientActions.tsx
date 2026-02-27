@@ -1,15 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 export default function ClientActions({
     textToCopy,
     filename = "resumeup-rewritten-resume.txt",
+    sid,
+    track,
+    seniority,
 }: {
     textToCopy: string;
     filename?: string;
+    sid?: string;
+    track?: string;
+    seniority?: string;
 }) {
     const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        trackEvent("view_report", {
+            sid: sid ?? null,
+            track: track ?? null,
+            seniority: seniority ?? null,
+        });
+    }, [sid, track, seniority]);
 
     const copy = async () => {
         try {

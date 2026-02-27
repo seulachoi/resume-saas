@@ -102,6 +102,8 @@ export async function POST(req: Request) {
       id: sid,
       user_id: userId,
       status: "paid", // credit-based full generation is already "paid"
+      variant_id: "credit_balance",
+      topup_only: false,
       resume_text: resumeText,
       jd_text: jdText,
       ats_before: Number.isFinite(atsBefore) ? atsBefore : 0,

@@ -25,7 +25,28 @@ async function waitForCredits(sb: any, userId: string, timeoutMs = 12000) {
   return 0;
 }
 
+async function logGenerationEvent(sb: any, payload: {
+  sid: string;
+  userId: string;
+  eventType: "started" | "success" | "failed";
+  durationMs?: number;
+  errorText?: string;
+}) {
+  try {
+    await sb.from("generation_events").insert({
+      sid: payload.sid,
+      user_id: payload.userId,
+      event_type: payload.eventType,
+      duration_ms: payload.durationMs ?? null,
+      error_text: payload.errorText ?? null,
+    });
+  } catch {
+    // best-effort logging
+  }
+}
+
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   try {
     const { sid } = await req.json();
     if (!sid) {
@@ -50,7 +71,7 @@ export async function POST(req: Request) {
       );
     }
     const userId = user.id;
-
+    await logGenerationEvent(sb, { sid, userId, eventType: "started" });
 
 
     // 2️⃣ 세션 조회
@@ -88,6 +109,21 @@ export async function POST(req: Request) {
     const hasResume = typeof session.resume_text === "string" && session.resume_text.length >= 200;
     const hasJd = typeof session.jd_text === "string" && session.jd_text.length >= 200;
     if (!hasResume || !hasJd) {
+      await sb
+        .from("checkout_sessions")
+        .update({
+          status: "fulfilled",
+          fulfilled_at: new Date().toISOString(),
+          generation_error: null,
+        })
+        .eq("id", sid)
+        .eq("user_id", userId);
+      await logGenerationEvent(sb, {
+        sid,
+        userId,
+        eventType: "success",
+        durationMs: Date.now() - startedAt,
+      });
       return NextResponse.json({ ok: true, topupOnly: true });
     }
 
@@ -150,15 +186,55 @@ export async function POST(req: Request) {
         p_user_id: userId,
         p_amount: 1,
       });
+      await sb
+        .from("checkout_sessions")
+        .update({
+          status: "failed",
+          generation_error: String(analyzeBody?.error || "Report generation failed"),
+        })
+        .eq("id", sid)
+        .eq("user_id", userId);
+      await logGenerationEvent(sb, {
+        sid,
+        userId,
+        eventType: "failed",
+        durationMs: Date.now() - startedAt,
+        errorText: String(analyzeBody?.error || "Report generation failed"),
+      });
       return NextResponse.json(
         { error: analyzeBody?.error || "Report generation failed" },
         { status: analyzeRes.status || 500 }
       );
     }
 
+    await logGenerationEvent(sb, {
+      sid,
+      userId,
+      eventType: "success",
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ ok: true });
 
   } catch (err: any) {
+    try {
+      const sb = supabaseServer();
+      const auth = await supabaseAuthServer();
+      const {
+        data: { user },
+      } = await auth.auth.getUser();
+      const userId = user?.id ? String(user.id) : "";
+      const body = await req.clone().json().catch(() => ({} as any));
+      const sid = String(body?.sid ?? "");
+      if (sid && userId) {
+        await logGenerationEvent(sb, {
+          sid,
+          userId,
+          eventType: "failed",
+          durationMs: Date.now() - startedAt,
+          errorText: String(err?.message || "Server error"),
+        });
+      }
+    } catch { }
     return NextResponse.json(
       { error: err?.message || "Server error" },
       { status: 500 }

@@ -90,6 +90,8 @@ export async function POST(req: Request) {
       .insert({
         user_id: userId,
         status: "created",
+        variant_id: variantId,
+        topup_only: topupOnly,
         resume_text: topupOnly ? null : resumeText,
         jd_text: topupOnly ? null : jdText,
         ats_before: topupOnly ? 0 : atsBefore,

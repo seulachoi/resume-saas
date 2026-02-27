@@ -610,7 +610,13 @@ export default async function ResultsPage({
               <div className="text-2xl font-semibold">Rewritten resume</div>
               <div className="mt-1 text-slate-600">Copy/paste into your resume template.</div>
             </div>
-            <ClientActions textToCopy={rewritten} filename={downloadName} />
+            <ClientActions
+              textToCopy={rewritten}
+              filename={downloadName}
+              sid={sid}
+              track={String(ctx.track || "")}
+              seniority={String(ctx.seniority || "")}
+            />
           </div>
 
           <pre className="whitespace-pre-wrap text-sm bg-slate-50 border border-slate-200 rounded-xl p-5">

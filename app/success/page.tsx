@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { trackEvent } from "@/lib/analytics";
 
 type Status = "loading" | "need_signin" | "generating" | "error";
 type AuthMeResponse = {
@@ -41,6 +42,7 @@ export default function SuccessPage() {
     setStatus("generating");
     setError("");
     setMessage("Finalizing your purchase…");
+    trackEvent("full_generate_start", { sid: sidValue });
 
     // Prefer having a user: attach purchase to account + apply credits reliably
     const uid = await waitForUser(7000);
@@ -74,6 +76,7 @@ export default function SuccessPage() {
       return;
     }
 
+    trackEvent("full_generate_success", { sid: sidValue });
     // Otherwise, this purchase generates a report
     window.location.href = `/results/${sidValue}`;
   };
@@ -93,6 +96,23 @@ export default function SuccessPage() {
       setError("Missing sid in URL.");
       return;
     }
+    try {
+      const variantId = localStorage.getItem("resumeup_last_checkout_variant");
+      const t = localStorage.getItem("resumeup_last_checkout_topup_only");
+      const topupOnly = t === null ? null : t === "true";
+      const c = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
+      const creditsAdded = c > 0 ? c : null;
+      const track = localStorage.getItem("resumeup_track");
+      const seniority = localStorage.getItem("resumeup_seniority");
+      trackEvent("purchase_success", {
+        sid: sidFromQuery,
+        topup_only: topupOnly,
+        variant_id: variantId,
+        credits_added: creditsAdded,
+        track,
+        seniority,
+      });
+    } catch { }
 
     runGenerate(sidFromQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps

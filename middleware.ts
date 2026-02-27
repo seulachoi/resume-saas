@@ -3,6 +3,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(request: NextRequest) {
+  const isProd = process.env.NODE_ENV === "production";
+  const pathname = request.nextUrl.pathname;
+  if (
+    isProd &&
+    (pathname.startsWith("/auth-test") ||
+      pathname.startsWith("/analyze-test") ||
+      pathname.startsWith("/api/test"))
+  ) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   // ✅ response 객체를 먼저 생성
   let response = NextResponse.next({
     request: {

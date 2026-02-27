@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { trackEvent } from "@/lib/analytics";
 import type { Track, Seniority } from "@/lib/prompts";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
@@ -444,6 +445,7 @@ export default function HomePage() {
 
   const [track, setTrack] = useState<Track>("product_manager");
   const [seniority, setSeniority] = useState<Seniority>("mid");
+  const startedInputRef = useRef(false);
 
   const how = useInViewOnce<HTMLDivElement>(0.25);
 
@@ -527,6 +529,13 @@ export default function HomePage() {
   const startFullWithCredit = async () => {
     const resumeForSession = resumeText || localStorage.getItem(LS_RESUME_KEY) || "";
     const jdForSession = jdText || localStorage.getItem(LS_JD_KEY) || "";
+    trackEvent("full_generate_start", {
+      track,
+      seniority,
+      credits_balance: credits ?? null,
+      topup_only: false,
+      variant_id: "credit_balance",
+    });
 
     const res = await fetch("/api/credit-session/create", {
       method: "POST",
@@ -593,6 +602,17 @@ export default function HomePage() {
 
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Checkout creation failed");
+      try {
+        localStorage.setItem("resumeup_last_checkout_variant", variantId);
+        localStorage.setItem("resumeup_last_checkout_topup_only", "true");
+      } catch { }
+      trackEvent("checkout_start", {
+        track,
+        seniority,
+        credits_balance: credits ?? null,
+        variant_id: variantId,
+        topup_only: true,
+      });
 
       // ✅ 무조건 레몬 체크아웃으로 이동
       window.location.href = json.checkoutUrl;
@@ -604,6 +624,13 @@ export default function HomePage() {
   // ✅ Start paid analysis checkout (login -> Lemon -> success -> full report)
   const handleUnlockClick = async () => {
     setError(null);
+    trackEvent("unlock_click", {
+      track,
+      seniority,
+      credits_balance: credits ?? null,
+      topup_only: false,
+      variant_id: DEFAULT_TOPUP_VARIANT_ID,
+    });
     const user = await getCurrentUser();
     if (!user) {
       try {
@@ -640,6 +667,17 @@ export default function HomePage() {
 
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Checkout creation failed");
+      try {
+        localStorage.setItem("resumeup_last_checkout_variant", DEFAULT_TOPUP_VARIANT_ID);
+        localStorage.setItem("resumeup_last_checkout_topup_only", "false");
+      } catch { }
+      trackEvent("checkout_start", {
+        track,
+        seniority,
+        credits_balance: effectiveBalance,
+        variant_id: DEFAULT_TOPUP_VARIANT_ID,
+        topup_only: false,
+      });
       window.location.href = json.checkoutUrl;
     } catch (e: any) {
       setError(e?.message ?? "Failed to start checkout");
@@ -681,6 +719,13 @@ export default function HomePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setResult(data);
+      trackEvent("preview_run", {
+        track,
+        seniority,
+        credits_balance: credits ?? null,
+        resume_len: resumeText.length,
+        jd_len: jdText.length,
+      });
     } catch (e: any) {
       setError(e?.message ?? "Request failed");
     } finally {
@@ -704,6 +749,11 @@ export default function HomePage() {
       if (s && SENIORITIES.some((x) => x.key === (s as any))) setSeniority(s as any);
 
     } catch { }
+  }, []);
+
+  useEffect(() => {
+    trackEvent("view_home", { track, seniority });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // persist inputs
@@ -1239,7 +1289,21 @@ export default function HomePage() {
               <div className="text-sm font-medium text-slate-700">Resume</div>
               <textarea
                 value={resumeText}
-                onChange={(e) => setResumeText(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!startedInputRef.current && (next.trim().length > 0 || jdText.trim().length > 0)) {
+                    startedInputRef.current = true;
+                    trackEvent("start_input", {
+                      track,
+                      seniority,
+                      credits_balance: credits ?? null,
+                      resume_len: next.length,
+                      jd_len: jdText.length,
+                      input_source: "resume",
+                    });
+                  }
+                  setResumeText(next);
+                }}
                 className="h-56 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                 placeholder="Paste resume..."
               />
@@ -1249,7 +1313,21 @@ export default function HomePage() {
               <div className="text-sm font-medium text-slate-700">Job description</div>
               <textarea
                 value={jdText}
-                onChange={(e) => setJdText(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!startedInputRef.current && (next.trim().length > 0 || resumeText.trim().length > 0)) {
+                    startedInputRef.current = true;
+                    trackEvent("start_input", {
+                      track,
+                      seniority,
+                      credits_balance: credits ?? null,
+                      resume_len: resumeText.length,
+                      jd_len: next.length,
+                      input_source: "jd",
+                    });
+                  }
+                  setJdText(next);
+                }}
                 className="h-56 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                 placeholder="Paste job description..."
               />

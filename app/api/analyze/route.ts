@@ -14,6 +14,7 @@ import {
 import { supabaseServer } from "@/lib/supabaseServer";
 
 /** ---------- helpers ---------- */
+const PROMPT_VERSION = "2026-02-27.v1";
 
 function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : 0));
@@ -340,6 +341,9 @@ export async function POST(req: Request) {
     });
 
     const rewrittenResume = rewrite.choices[0].message.content || "";
+    const rewriteWarnings = {
+      todoCount: (rewrittenResume.match(/TODO/gi) || []).length,
+    };
 
     // --- ATS after ---
     const rewrittenLower = rewrittenResume.toLowerCase();
@@ -406,11 +410,15 @@ export async function POST(req: Request) {
         .from("checkout_sessions")
         .update({
           status: "fulfilled",
+          fulfilled_at: new Date().toISOString(),
+          generation_error: null,
           ats_after: overallAfter,
           result_json: {
+            promptVersion: PROMPT_VERSION,
             selectedContext: { track, seniority },
             personalization,
             scoreDrivers,
+            rewriteWarnings,
             overall_before: overallBefore,
             overall_after: overallAfter,
             subscores_before: {
@@ -437,7 +445,9 @@ export async function POST(req: Request) {
       mode,
       selectedContext: { track, seniority },
       personalization,
+      promptVersion: PROMPT_VERSION,
       scoreDrivers,
+      rewriteWarnings,
       atsScore,
       atsAfter,
       overallBefore,

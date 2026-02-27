@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
@@ -45,6 +46,13 @@ export default function AuthContinuePage() {
           const balance = creditRes.ok ? Number(creditJson.balance ?? 0) : 0;
 
           if (balance > 0) {
+            trackEvent("full_generate_start", {
+              track,
+              seniority,
+              credits_balance: balance,
+              topup_only: false,
+              variant_id: "credit_balance",
+            });
             const r = await fetch("/api/credit-session/create", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -79,6 +87,17 @@ export default function AuthContinuePage() {
           });
           const j = await r.json();
           if (!r.ok) throw new Error(j?.error || "Checkout creation failed");
+          try {
+            localStorage.setItem("resumeup_last_checkout_variant", variantId);
+            localStorage.setItem("resumeup_last_checkout_topup_only", "false");
+          } catch { }
+          trackEvent("checkout_start", {
+            track,
+            seniority,
+            credits_balance: balance,
+            variant_id: variantId,
+            topup_only: false,
+          });
           localStorage.removeItem("resumeup_post_login_checkout_mode");
           localStorage.removeItem("resumeup_post_login_topup_variant");
           window.location.href = j.checkoutUrl;
@@ -101,6 +120,16 @@ export default function AuthContinuePage() {
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || "Checkout creation failed");
+        try {
+          localStorage.setItem("resumeup_last_checkout_variant", variantId);
+          localStorage.setItem("resumeup_last_checkout_topup_only", "true");
+        } catch { }
+        trackEvent("checkout_start", {
+          track,
+          seniority,
+          variant_id: variantId,
+          topup_only: true,
+        });
         localStorage.removeItem("resumeup_post_login_checkout_mode");
         localStorage.removeItem("resumeup_post_login_topup_variant");
         window.location.href = j.checkoutUrl;
