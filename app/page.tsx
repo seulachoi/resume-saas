@@ -448,6 +448,7 @@ export default function HomePage() {
   const [track, setTrack] = useState<Track>("product_manager");
   const [seniority, setSeniority] = useState<Seniority>("mid");
   const startedInputRef = useRef(false);
+  const betaGrantCheckedRef = useRef(false);
 
   const how = useInViewOnce<HTMLDivElement>(0.25);
 
@@ -556,20 +557,17 @@ export default function HomePage() {
     window.location.href = `/success?sid=${encodeURIComponent(data.sid)}`;
   };
 
-  const grantBetaCreditsThenGenerate = async (): Promise<boolean> => {
+  const grantBetaCreditsOnLogin = async (): Promise<void> => {
+    if (!BETA_FREE_UNLOCK) return;
     const grantRes = await fetch("/api/beta/grant-credits", { method: "POST" });
     const grantData = await grantRes.json();
-    if (!grantRes.ok) throw new Error(grantData?.error || "Failed to grant beta credits");
+    if (!grantRes.ok) {
+      throw new Error(grantData?.error || "Failed to process beta credits");
+    }
     if (grantData?.granted) {
-      setToast(`🎁 Beta Access Granted — +${Number(grantData?.grantedCredits ?? BETA_FREE_UNLOCK_CREDITS)} credits`);
+      setToast(`🎁 런칭 기념 프리 크레딧 +${Number(grantData?.grantedCredits ?? BETA_FREE_UNLOCK_CREDITS)} 지급 완료`);
     }
-    const currentBalance = await getCurrentBalance();
-    const effectiveBalance = currentBalance ?? Number(grantData?.balance ?? 0) ?? 0;
-    if (effectiveBalance > 0) {
-      await startFullWithCredit();
-      return true;
-    }
-    return false;
+    await refreshCredits();
   };
 
   // ✅ Top up credits: logout -> login -> Lemon checkout, login -> Lemon checkout
@@ -660,11 +658,6 @@ export default function HomePage() {
     }
 
     try {
-      if (BETA_FREE_UNLOCK) {
-        const started = await grantBetaCreditsThenGenerate();
-        if (started) return;
-      }
-
       const balance = await getCurrentBalance();
       const effectiveBalance = balance ?? (typeof credits === "number" ? credits : 0);
       if (effectiveBalance > 0) {
@@ -805,11 +798,23 @@ export default function HomePage() {
       if (localUser?.id) {
         setUserEmail(localUser.email ?? null);
         setUserId(localUser.id);
+        if (BETA_FREE_UNLOCK && !betaGrantCheckedRef.current) {
+          betaGrantCheckedRef.current = true;
+          try {
+            await grantBetaCreditsOnLogin();
+          } catch { }
+        }
         return;
       }
       const user = await getCurrentUser();
       setUserEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
+      if (user?.id && BETA_FREE_UNLOCK && !betaGrantCheckedRef.current) {
+        betaGrantCheckedRef.current = true;
+        try {
+          await grantBetaCreditsOnLogin();
+        } catch { }
+      }
     };
 
     syncSession();
@@ -825,6 +830,11 @@ export default function HomePage() {
         if (session?.user?.id) {
           setUserEmail(session.user.email ?? null);
           setUserId(session.user.id);
+          if (BETA_FREE_UNLOCK) {
+            try {
+              await grantBetaCreditsOnLogin();
+            } catch { }
+          }
         } else {
           // Cookie session can exist even when local session is null.
           await syncSession();
@@ -955,6 +965,13 @@ export default function HomePage() {
 
       {/* HERO */}
       <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
+        {BETA_FREE_UNLOCK ? (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+            <div className="rounded-full border border-emerald-300/40 bg-emerald-400/20 px-4 py-2 text-xs md:text-sm font-semibold text-emerald-100 backdrop-blur">
+              현재 런칭 기념 프리 크레딧 제공! 로그인하면 10크레딧 지급 (1회)
+            </div>
+          </div>
+        ) : null}
         <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
 

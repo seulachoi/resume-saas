@@ -45,27 +45,7 @@ export default function AuthContinuePage() {
           if (BETA_FREE_UNLOCK) {
             const grant = await fetch("/api/beta/grant-credits", { method: "POST" });
             const grantJson = await grant.json();
-            if (!grant.ok) throw new Error(grantJson?.error || "Failed to grant beta credits");
-            const betaBalance = Number(grantJson?.balance ?? 0);
-            if (betaBalance > 0) {
-              const r = await fetch("/api/credit-session/create", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  resumeText,
-                  jdText,
-                  atsBefore: 0,
-                  track,
-                  seniority,
-                }),
-              });
-              const j = await r.json();
-              if (!r.ok) throw new Error(j?.error || "Failed to create credit session");
-              localStorage.removeItem("resumeup_post_login_checkout_mode");
-              localStorage.removeItem("resumeup_post_login_topup_variant");
-              window.location.href = `/success?sid=${encodeURIComponent(j.sid)}`;
-              return;
-            }
+            if (!grant.ok) throw new Error(grantJson?.error || "Failed to process beta credits");
           }
 
           const creditRes = await fetch("/api/auth/credits", { cache: "no-store" });
