@@ -963,15 +963,18 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* HERO */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
-        {BETA_FREE_UNLOCK ? (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-            <div className="rounded-full border border-emerald-300/40 bg-emerald-400/20 px-4 py-2 text-xs md:text-sm font-semibold text-emerald-100 backdrop-blur">
+      {BETA_FREE_UNLOCK ? (
+        <section className="border-b border-emerald-200 bg-emerald-50">
+          <div className="mx-auto max-w-6xl px-6 py-3 text-center">
+            <div className="inline-flex items-center rounded-full border border-emerald-300 bg-white px-4 py-1.5 text-xs md:text-sm font-semibold text-emerald-900">
               현재 런칭 기념 프리 크레딧 제공! 로그인하면 10크레딧 지급 (1회)
             </div>
           </div>
-        ) : null}
+        </section>
+      ) : null}
+
+      {/* HERO */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
         <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
 
