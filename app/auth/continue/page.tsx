@@ -12,6 +12,7 @@ type CreditsResponse = { balance: number };
 type AuthMeResponse = { user: { id: string; email: string | null } | null };
 
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
+const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 
 export default function AuthContinuePage() {
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,32 @@ export default function AuthContinuePage() {
         const seniority = localStorage.getItem(LS_SENIORITY_KEY) || "mid";
 
         if (mode === "analysis") {
+          if (BETA_FREE_UNLOCK) {
+            const grant = await fetch("/api/beta/grant-credits", { method: "POST" });
+            const grantJson = await grant.json();
+            if (!grant.ok) throw new Error(grantJson?.error || "Failed to grant beta credits");
+            const betaBalance = Number(grantJson?.balance ?? 0);
+            if (betaBalance > 0) {
+              const r = await fetch("/api/credit-session/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  resumeText,
+                  jdText,
+                  atsBefore: 0,
+                  track,
+                  seniority,
+                }),
+              });
+              const j = await r.json();
+              if (!r.ok) throw new Error(j?.error || "Failed to create credit session");
+              localStorage.removeItem("resumeup_post_login_checkout_mode");
+              localStorage.removeItem("resumeup_post_login_topup_variant");
+              window.location.href = `/success?sid=${encodeURIComponent(j.sid)}`;
+              return;
+            }
+          }
+
           const creditRes = await fetch("/api/auth/credits", { cache: "no-store" });
           const creditJson: CreditsResponse = await creditRes.json();
           const balance = creditRes.ok ? Number(creditJson.balance ?? 0) : 0;

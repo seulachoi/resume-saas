@@ -22,6 +22,8 @@ const LS_SENIORITY_KEY = "resumeup_seniority";
 
 // Lemon default bundle (Most popular = 5 credits)
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
+const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
+const BETA_FREE_UNLOCK_CREDITS = Number(process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK_CREDITS || "10");
 
 /** ===================== Role Context (UI) ===================== */
 const TRACKS: { key: Track; label: string }[] = [
@@ -554,6 +556,22 @@ export default function HomePage() {
     window.location.href = `/success?sid=${encodeURIComponent(data.sid)}`;
   };
 
+  const grantBetaCreditsThenGenerate = async (): Promise<boolean> => {
+    const grantRes = await fetch("/api/beta/grant-credits", { method: "POST" });
+    const grantData = await grantRes.json();
+    if (!grantRes.ok) throw new Error(grantData?.error || "Failed to grant beta credits");
+    if (grantData?.granted) {
+      setToast(`🎁 Beta Access Granted — +${Number(grantData?.grantedCredits ?? BETA_FREE_UNLOCK_CREDITS)} credits`);
+    }
+    const currentBalance = await getCurrentBalance();
+    const effectiveBalance = currentBalance ?? Number(grantData?.balance ?? 0) ?? 0;
+    if (effectiveBalance > 0) {
+      await startFullWithCredit();
+      return true;
+    }
+    return false;
+  };
+
   // ✅ Top up credits: logout -> login -> Lemon checkout, login -> Lemon checkout
   const topUpCreditsNow = async (variantId: string = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
@@ -642,6 +660,11 @@ export default function HomePage() {
     }
 
     try {
+      if (BETA_FREE_UNLOCK) {
+        const started = await grantBetaCreditsThenGenerate();
+        if (started) return;
+      }
+
       const balance = await getCurrentBalance();
       const effectiveBalance = balance ?? (typeof credits === "number" ? credits : 0);
       if (effectiveBalance > 0) {
@@ -959,7 +982,7 @@ export default function HomePage() {
                 href="#pricing"
                 className="inline-flex items-center justify-center rounded-xl border border-white/20 bg-transparent px-6 py-3 text-sm font-semibold text-white/90 hover:bg-white/10"
               >
-                Pricing
+                {BETA_FREE_UNLOCK ? "Beta Access" : "Pricing"}
               </a>
             </div>
 
@@ -1482,7 +1505,9 @@ export default function HomePage() {
                   </div>
 
                   <div className="mt-2 text-sm text-white/80">
-                    Use credits to generate instantly — or top up in Pricing below.
+                    {BETA_FREE_UNLOCK
+                      ? "Beta Access (Limited Time): free full report for early users. Future versions will be paid."
+                      : "Use credits to generate instantly — or top up in Pricing below."}
                   </div>
 
                   <div className="mt-6 flex flex-wrap items-center gap-4">
