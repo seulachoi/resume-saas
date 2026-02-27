@@ -113,10 +113,9 @@ export default function TermsPage() {
 
       <section className="space-y-2 border-t border-slate-200 pt-6">
         <h2 className="text-lg font-semibold text-slate-900">Business Information</h2>
-        <p>Operator: Seula Choi (sole proprietor)</p>
         <p>Location: Republic of Korea</p>
         <p>
-          Contact: <a className="underline" href="mailto:peach43054@gmail.com">peach43054@gmail.com</a>
+          Contact: <a className="underline" href="mailto:resumeup_support@gmail.com">resumeup_support@gmail.com</a>
         </p>
       </section>
     </main>

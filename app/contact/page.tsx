@@ -12,8 +12,8 @@ export default function ContactPage() {
         <h2 className="text-xl font-semibold text-slate-900">Support Email</h2>
         <p>
           Email:{" "}
-          <a className="underline font-medium" href="mailto:peach43054@gmail.com">
-            peach43054@gmail.com
+          <a className="underline font-medium" href="mailto:resumeup_support@gmail.com">
+            resumeup_support@gmail.com
           </a>
         </p>
         <p className="text-sm text-slate-500">Typical response time: within 1-2 business days.</p>
@@ -43,7 +43,6 @@ export default function ContactPage() {
 
       <section className="border-t border-slate-200 pt-6 space-y-2">
         <h2 className="text-lg font-semibold text-slate-900">Business Information</h2>
-        <p>Operator: Seula Choi (sole proprietor)</p>
         <p>Location: Republic of Korea</p>
       </section>
     </main>

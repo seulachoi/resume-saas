@@ -44,8 +44,8 @@ export default function RefundPage() {
         <h2 className="text-xl font-semibold text-slate-900">4. How to Request a Refund</h2>
         <p>
           Email{" "}
-          <a className="underline" href="mailto:peach43054@gmail.com">
-            peach43054@gmail.com
+          <a className="underline" href="mailto:resumeup_support@gmail.com">
+            resumeup_support@gmail.com
           </a>{" "}
           with the subject &quot;Refund Request&quot; and include:
         </p>
