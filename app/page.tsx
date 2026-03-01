@@ -961,15 +961,13 @@ export default function HomePage() {
         </div>
       </header>
 
-      {BETA_FREE_UNLOCK ? (
-        <div className="sticky top-[64px] z-30 pointer-events-none">
-          <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
-            <div className="text-base md:text-xl font-extrabold tracking-tight text-slate-900">
-              Launch Offer: Sign in and get 10 free credits!
-            </div>
+      <div className="sticky top-[64px] z-30 pointer-events-none">
+        <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
+          <div className="text-lg md:text-2xl font-extrabold tracking-tight text-slate-900">
+            Launch Offer: Sign in and get 10 free credits!
           </div>
         </div>
-      ) : null}
+      </div>
 
       {/* HERO */}
       <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
