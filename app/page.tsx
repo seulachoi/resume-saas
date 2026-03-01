@@ -558,10 +558,12 @@ export default function HomePage() {
   };
 
   const grantBetaCreditsOnLogin = async (): Promise<void> => {
-    if (!BETA_FREE_UNLOCK) return;
     const grantRes = await fetch("/api/beta/grant-credits", { method: "POST" });
     const grantData = await grantRes.json();
     if (!grantRes.ok) {
+      if (grantRes.status === 403 && String(grantData?.error || "").toLowerCase().includes("beta")) {
+        return;
+      }
       throw new Error(grantData?.error || "Failed to process beta credits");
     }
     if (grantData?.granted) {
@@ -798,7 +800,7 @@ export default function HomePage() {
       if (localUser?.id) {
         setUserEmail(localUser.email ?? null);
         setUserId(localUser.id);
-        if (BETA_FREE_UNLOCK && !betaGrantCheckedRef.current) {
+        if (!betaGrantCheckedRef.current) {
           betaGrantCheckedRef.current = true;
           try {
             await grantBetaCreditsOnLogin();
@@ -811,7 +813,7 @@ export default function HomePage() {
       const user = await getCurrentUser();
       setUserEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
-      if (user?.id && BETA_FREE_UNLOCK && !betaGrantCheckedRef.current) {
+      if (user?.id && !betaGrantCheckedRef.current) {
         betaGrantCheckedRef.current = true;
         try {
           await grantBetaCreditsOnLogin();
@@ -834,7 +836,8 @@ export default function HomePage() {
         if (session?.user?.id) {
           setUserEmail(session.user.email ?? null);
           setUserId(session.user.id);
-          if (BETA_FREE_UNLOCK) {
+          if (!betaGrantCheckedRef.current) {
+            betaGrantCheckedRef.current = true;
             try {
               await grantBetaCreditsOnLogin();
             } catch (e: any) {

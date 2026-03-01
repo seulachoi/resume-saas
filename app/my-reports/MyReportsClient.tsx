@@ -7,7 +7,6 @@ const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_TRACK_KEY = "resumeup_track";
 const LS_SENIORITY_KEY = "resumeup_seniority";
-const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 
 // ✅ Most popular bundle
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
@@ -263,13 +262,16 @@ export default function MyReportsClient({
   };
 
   useEffect(() => {
-    if (!signedIn || !BETA_FREE_UNLOCK || betaCheckedRef.current) return;
+    if (!signedIn || betaCheckedRef.current) return;
     betaCheckedRef.current = true;
     (async () => {
       try {
         const res = await fetch("/api/beta/grant-credits", { method: "POST" });
         const j = await res.json();
         if (!res.ok) {
+          if (res.status === 403 && String(j?.error || "").toLowerCase().includes("beta")) {
+            return;
+          }
           setToast(`Launch offer unavailable: ${String(j?.error || "unknown error")}`);
           return;
         }

@@ -12,7 +12,6 @@ type CreditsResponse = { balance: number };
 type AuthMeResponse = { user: { id: string; email: string | null } | null };
 
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
-const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 
 export default function AuthContinuePage() {
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +41,11 @@ export default function AuthContinuePage() {
         const seniority = localStorage.getItem(LS_SENIORITY_KEY) || "mid";
 
         if (mode === "analysis") {
-          if (BETA_FREE_UNLOCK) {
-            const grant = await fetch("/api/beta/grant-credits", { method: "POST" });
-            const grantJson = await grant.json();
-            if (!grant.ok) {
-              // Do not block the main flow if beta grant fails.
-              console.warn("beta grant failed:", grantJson?.error || "unknown error");
-            }
+          const grant = await fetch("/api/beta/grant-credits", { method: "POST" });
+          const grantJson = await grant.json().catch(() => ({} as any));
+          if (!grant.ok && !(grant.status === 403 && String(grantJson?.error || "").toLowerCase().includes("beta"))) {
+            // Do not block the main flow if beta grant fails.
+            console.warn("beta grant failed:", grantJson?.error || "unknown error");
           }
 
           const creditRes = await fetch("/api/auth/credits", { cache: "no-store" });
