@@ -964,9 +964,9 @@ export default function HomePage() {
       </header>
 
       <div className="sticky top-[64px] z-30 pointer-events-none">
-        <div className="mx-auto max-w-6xl px-6 py-3 text-center">
-          <div className="inline-flex items-center rounded-full border border-emerald-300 bg-white/95 px-4 py-1.5 text-xs md:text-sm font-semibold text-emerald-900 shadow-sm">
-            Launch Offer: Sign in and get 10 free credits (one-time).
+        <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
+          <div className="text-base md:text-xl font-extrabold tracking-tight text-slate-900">
+            Launch Offer: Sign in and get 10 free credits!
           </div>
         </div>
       </div>
