@@ -569,9 +569,7 @@ export default function HomePage() {
     }
     setCredits(Number(grantData?.balance ?? 0));
     if (grantData?.granted) {
-      setToast(`🎁 런칭 기념 프리 크레딧 +${Number(grantData?.grantedCredits ?? BETA_FREE_UNLOCK_CREDITS)} 지급 완료`);
-    } else if (BETA_FREE_UNLOCK && grantData?.alreadyGranted) {
-      setToast("Launch offer already used for this account.");
+      setToast(`🎁 Launch offer applied: +${Number(grantData?.grantedCredits ?? BETA_FREE_UNLOCK_CREDITS)} free credits added!`);
     }
     await refreshCredits();
   };
@@ -890,7 +888,7 @@ export default function HomePage() {
       const c = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
 
       if (c > 0 && ts && Date.now() - ts < 10 * 60 * 1000) {
-        setToast(`Credits +${c} added`);
+        setToast(`🎁 Credits +${c} added!`);
         refreshCredits();
         localStorage.removeItem("resumeup_last_purchase_ts");
         localStorage.removeItem("resumeup_last_purchase_credits");
@@ -1712,7 +1710,7 @@ export default function HomePage() {
       {/* Toast */}
       {toast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
-          <div className="rounded-2xl bg-slate-900 text-white px-6 py-3 shadow-lg border border-white/10 text-base md:text-lg font-semibold">
+          <div className="rounded-2xl bg-emerald-300 text-slate-950 px-7 py-3 shadow-lg border border-emerald-200 text-lg md:text-2xl font-extrabold tracking-tight">
             {toast}
           </div>
         </div>

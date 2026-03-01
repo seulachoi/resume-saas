@@ -278,9 +278,7 @@ export default function MyReportsClient({
         }
         setCreditBalance(Number(j?.balance ?? 0));
         if (j?.granted) {
-          setToast(`🎁 Launch offer applied: +${Number(j?.grantedCredits ?? 10)} credits`);
-        } else if (BETA_FREE_UNLOCK && j?.alreadyGranted) {
-          setToast("Launch offer already used for this account.");
+          setToast(`🎁 Launch offer applied: +${Number(j?.grantedCredits ?? 10)} free credits added!`);
         }
         await refreshCredits();
       } catch (e: any) {
@@ -484,7 +482,7 @@ export default function MyReportsClient({
 
       {toast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
-          <div className="rounded-2xl bg-slate-900 text-white px-6 py-3 shadow-lg border border-white/10 text-base md:text-lg font-semibold">
+          <div className="rounded-2xl bg-emerald-300 text-slate-950 px-7 py-3 shadow-lg border border-emerald-200 text-lg md:text-2xl font-extrabold tracking-tight">
             {toast}
           </div>
         </div>
