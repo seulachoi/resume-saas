@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { Suspense } from "react";
 import GaPageviewTracker from "./GaPageviewTracker";
 import "./globals.css";
 
@@ -63,7 +64,11 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
-        {gaId ? <GaPageviewTracker /> : null}
+        {gaId ? (
+          <Suspense fallback={null}>
+            <GaPageviewTracker />
+          </Suspense>
+        ) : null}
         {children}
       </body>
     </html>
