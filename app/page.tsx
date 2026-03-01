@@ -963,15 +963,13 @@ export default function HomePage() {
         </div>
       </header>
 
-      {BETA_FREE_UNLOCK ? (
-        <section className="border-b border-emerald-200 bg-emerald-50">
-          <div className="mx-auto max-w-6xl px-6 py-3 text-center">
-            <div className="inline-flex items-center rounded-full border border-emerald-300 bg-white px-4 py-1.5 text-xs md:text-sm font-semibold text-emerald-900">
-              현재 런칭 기념 프리 크레딧 제공! 로그인하면 10크레딧 지급 (1회)
-            </div>
+      <div className="sticky top-[64px] z-30 pointer-events-none">
+        <div className="mx-auto max-w-6xl px-6 py-3 text-center">
+          <div className="inline-flex items-center rounded-full border border-emerald-300 bg-white/95 px-4 py-1.5 text-xs md:text-sm font-semibold text-emerald-900 shadow-sm">
+            Launch Offer: Sign in and get 10 free credits (one-time).
           </div>
-        </section>
-      ) : null}
+        </div>
+      </div>
 
       {/* HERO */}
       <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
