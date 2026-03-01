@@ -7,6 +7,7 @@ const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_TRACK_KEY = "resumeup_track";
 const LS_SENIORITY_KEY = "resumeup_seniority";
+const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 
 // ✅ Most popular bundle
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
@@ -269,14 +270,17 @@ export default function MyReportsClient({
         const res = await fetch("/api/beta/grant-credits", { method: "POST" });
         const j = await res.json();
         if (!res.ok) {
-          if (res.status === 403 && String(j?.error || "").toLowerCase().includes("beta")) {
+          if (!BETA_FREE_UNLOCK && res.status === 403) {
             return;
           }
-          setToast(`Launch offer unavailable: ${String(j?.error || "unknown error")}`);
+          setToast(`Launch offer unavailable: ${res.status} ${String(j?.error || "unknown error")}`);
           return;
         }
+        setCreditBalance(Number(j?.balance ?? 0));
         if (j?.granted) {
           setToast(`🎁 Launch offer applied: +${Number(j?.grantedCredits ?? 10)} credits`);
+        } else if (BETA_FREE_UNLOCK && j?.alreadyGranted) {
+          setToast("Launch offer already used for this account.");
         }
         await refreshCredits();
       } catch (e: any) {

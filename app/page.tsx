@@ -561,13 +561,17 @@ export default function HomePage() {
     const grantRes = await fetch("/api/beta/grant-credits", { method: "POST" });
     const grantData = await grantRes.json();
     if (!grantRes.ok) {
-      if (grantRes.status === 403 && String(grantData?.error || "").toLowerCase().includes("beta")) {
+      // When beta is truly OFF on client, silently ignore server-side beta-disabled.
+      if (!BETA_FREE_UNLOCK && grantRes.status === 403) {
         return;
       }
-      throw new Error(grantData?.error || "Failed to process beta credits");
+      throw new Error(`${grantRes.status}: ${grantData?.error || "Failed to process beta credits"}`);
     }
+    setCredits(Number(grantData?.balance ?? 0));
     if (grantData?.granted) {
       setToast(`🎁 런칭 기념 프리 크레딧 +${Number(grantData?.grantedCredits ?? BETA_FREE_UNLOCK_CREDITS)} 지급 완료`);
+    } else if (BETA_FREE_UNLOCK && grantData?.alreadyGranted) {
+      setToast("Launch offer already used for this account.");
     }
     await refreshCredits();
   };
