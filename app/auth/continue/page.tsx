@@ -45,7 +45,10 @@ export default function AuthContinuePage() {
           if (BETA_FREE_UNLOCK) {
             const grant = await fetch("/api/beta/grant-credits", { method: "POST" });
             const grantJson = await grant.json();
-            if (!grant.ok) throw new Error(grantJson?.error || "Failed to process beta credits");
+            if (!grant.ok) {
+              // Do not block the main flow if beta grant fails.
+              console.warn("beta grant failed:", grantJson?.error || "unknown error");
+            }
           }
 
           const creditRes = await fetch("/api/auth/credits", { cache: "no-store" });

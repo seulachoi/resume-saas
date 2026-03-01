@@ -34,6 +34,17 @@ async function ensureCreditRow(sb: any, userId: string) {
   return Number(row.balance ?? 0);
 }
 
+async function addCreditsDirect(sb: any, userId: string, amount: number) {
+  const current = await ensureCreditRow(sb, userId);
+  const next = Math.max(0, current + amount);
+  const { error } = await sb
+    .from("user_credits")
+    .update({ balance: next })
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message || "Failed to update credits");
+  return next;
+}
+
 export async function POST() {
   if (!isBetaEnabled()) {
     return NextResponse.json({ error: "Beta mode disabled" }, { status: 403 });
@@ -50,16 +61,61 @@ export async function POST() {
   const sb = supabaseServer();
   await ensureCreditRow(sb, user.id);
 
-  const { data: grantRows, error: grantErr } = await sb.rpc("grant_beta_credits_once", {
-    p_user_id: user.id,
-    p_amount: amount,
-    p_source: "beta_unlock_v1",
-  });
+  // Preferred path: DB one-time guard table (if migration is applied).
+  const { error: insErr, data: inserted } = await sb
+    .from("beta_credit_grants")
+    .insert({
+      user_id: user.id,
+      granted_credits: amount,
+      source: "beta_unlock_v1",
+      granted_at: new Date().toISOString(),
+    })
+    .select("user_id")
+    .maybeSingle();
+
+  if (!insErr) {
+    if (inserted?.user_id) {
+      const balance = await addCreditsDirect(sb, user.id, amount);
+      return NextResponse.json({
+        ok: true,
+        granted: true,
+        grantedCredits: amount,
+        balance,
+        alreadyGranted: false,
+        mode: "table_guard",
+      });
+    }
+    const balance = await ensureCreditRow(sb, user.id);
+    return NextResponse.json({
+      ok: true,
+      granted: false,
+      grantedCredits: 0,
+      balance,
+      alreadyGranted: true,
+      mode: "table_guard",
+    });
+  }
+
+  // Unique violation means already granted.
+  if (String(insErr?.code || "") === "23505") {
+    const balance = await ensureCreditRow(sb, user.id);
+    return NextResponse.json({
+      ok: true,
+      granted: false,
+      grantedCredits: 0,
+      balance,
+      alreadyGranted: true,
+      mode: "table_guard",
+    });
+  }
+
+  const grantErr = insErr;
   if (grantErr) {
     // Fallback: if DB migration wasn't applied yet, enforce one-time grant via auth user_metadata.
     const fallbackAllowed =
-      String(grantErr.message || "").toLowerCase().includes("grant_beta_credits_once") ||
-      String(grantErr.message || "").toLowerCase().includes("does not exist");
+      String(grantErr.message || "").toLowerCase().includes("beta_credit_grants") ||
+      String(grantErr.message || "").toLowerCase().includes("does not exist") ||
+      String(grantErr.code || "") === "42p01";
     if (!fallbackAllowed) {
       return NextResponse.json(
         { error: grantErr.message || "Failed to process beta grant" },
@@ -84,13 +140,7 @@ export async function POST() {
       });
     }
 
-    const { error: addErr } = await sb.rpc("add_credits", {
-      p_user_id: user.id,
-      p_amount: amount,
-    });
-    if (addErr) {
-      return NextResponse.json({ error: addErr.message || "Failed to add beta credits" }, { status: 500 });
-    }
+    const balance = await addCreditsDirect(sb, user.id, amount);
 
     const { error: updErr } = await sb.auth.admin.updateUserById(user.id, {
       user_metadata: {
@@ -103,26 +153,13 @@ export async function POST() {
       return NextResponse.json({ error: updErr.message || "Failed to update user metadata" }, { status: 500 });
     }
 
-    const bal = await ensureCreditRow(sb, user.id);
     return NextResponse.json({
       ok: true,
       granted: true,
       grantedCredits: amount,
-      balance: bal,
+      balance,
       alreadyGranted: false,
       mode: "metadata_fallback",
     });
   }
-
-  const row = Array.isArray(grantRows) ? grantRows[0] : null;
-  const granted = Boolean(row?.granted);
-  const balance = Number(row?.balance ?? 0);
-
-  return NextResponse.json({
-    ok: true,
-    granted,
-    grantedCredits: granted ? amount : 0,
-    balance,
-    alreadyGranted: !granted,
-  });
 }

@@ -269,12 +269,17 @@ export default function MyReportsClient({
       try {
         const res = await fetch("/api/beta/grant-credits", { method: "POST" });
         const j = await res.json();
-        if (!res.ok) return;
+        if (!res.ok) {
+          setToast(`Launch offer unavailable: ${String(j?.error || "unknown error")}`);
+          return;
+        }
         if (j?.granted) {
           setToast(`🎁 Launch offer applied: +${Number(j?.grantedCredits ?? 10)} credits`);
         }
         await refreshCredits();
-      } catch { }
+      } catch (e: any) {
+        setToast(`Launch offer unavailable: ${e?.message ?? "unknown error"}`);
+      }
     })();
   }, [signedIn]);
 

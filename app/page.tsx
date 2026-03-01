@@ -802,7 +802,9 @@ export default function HomePage() {
           betaGrantCheckedRef.current = true;
           try {
             await grantBetaCreditsOnLogin();
-          } catch { }
+          } catch (e: any) {
+            setToast(`Launch offer unavailable: ${e?.message ?? "unknown error"}`);
+          }
         }
         return;
       }
@@ -813,7 +815,9 @@ export default function HomePage() {
         betaGrantCheckedRef.current = true;
         try {
           await grantBetaCreditsOnLogin();
-        } catch { }
+        } catch (e: any) {
+          setToast(`Launch offer unavailable: ${e?.message ?? "unknown error"}`);
+        }
       }
     };
 
@@ -833,7 +837,9 @@ export default function HomePage() {
           if (BETA_FREE_UNLOCK) {
             try {
               await grantBetaCreditsOnLogin();
-            } catch { }
+            } catch (e: any) {
+              setToast(`Launch offer unavailable: ${e?.message ?? "unknown error"}`);
+            }
           }
         } else {
           // Cookie session can exist even when local session is null.
@@ -961,13 +967,15 @@ export default function HomePage() {
         </div>
       </header>
 
-      <div className="sticky top-[64px] z-30 pointer-events-none">
-        <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
-          <div className="text-lg md:text-2xl font-extrabold tracking-tight text-slate-900">
-            Launch Offer: Sign in and get 10 free credits!
+      {BETA_FREE_UNLOCK ? (
+        <div className="sticky top-[64px] z-30 pointer-events-none">
+          <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
+            <div className="text-lg md:text-2xl font-extrabold tracking-tight text-slate-900">
+              Launch Offer: Sign in and get 10 free credits!
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* HERO */}
       <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">
