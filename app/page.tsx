@@ -505,12 +505,12 @@ export default function HomePage() {
       const res = await fetch("/api/auth/credits", { cache: "no-store" });
       const data: CreditsResponse = await res.json();
       if (!res.ok) {
-        setCredits(null);
+        setCredits(0);
         return;
       }
       setCredits(Number(data.balance ?? 0));
     } catch {
-      setCredits(null);
+      setCredits(0);
     }
   };
 
@@ -930,19 +930,17 @@ export default function HomePage() {
                   My Reports
                 </a>
 
-                {credits !== null && (
-                  <button
-                    type="button"
-                    onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
-                    className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
-                  >
-                    Credits
-                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
-                      {credits}
-                    </span>
-                    <span className="text-xs underline underline-offset-2">Top up</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
+                  className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                >
+                  Credits
+                  <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
+                    {Number(credits ?? 0)}
+                  </span>
+                  <span className="text-xs underline underline-offset-2">Top up</span>
+                </button>
 
                 <button
                   onClick={signOut}
@@ -963,13 +961,15 @@ export default function HomePage() {
         </div>
       </header>
 
-      <div className="sticky top-[64px] z-30 pointer-events-none">
-        <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
-          <div className="text-base md:text-xl font-extrabold tracking-tight text-slate-900">
-            Launch Offer: Sign in and get 10 free credits!
+      {BETA_FREE_UNLOCK ? (
+        <div className="sticky top-[64px] z-30 pointer-events-none">
+          <div className="w-full bg-yellow-300 border-y border-yellow-400 px-6 py-3 text-center shadow-sm">
+            <div className="text-base md:text-xl font-extrabold tracking-tight text-slate-900">
+              Launch Offer: Sign in and get 10 free credits!
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* HERO */}
       <section className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 text-white">

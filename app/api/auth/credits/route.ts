@@ -16,13 +16,23 @@ export async function GET() {
       .from("user_credits")
       .select("balance")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ balance: Number(row?.balance ?? 0) }, { status: 200 });
+    if (!row) {
+      const { error: upErr } = await db
+        .from("user_credits")
+        .upsert({ user_id: user.id, balance: 0 }, { onConflict: "user_id" });
+      if (upErr) {
+        return NextResponse.json({ error: upErr.message }, { status: 500 });
+      }
+      return NextResponse.json({ balance: 0 }, { status: 200 });
+    }
+
+    return NextResponse.json({ balance: Number(row.balance ?? 0) }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

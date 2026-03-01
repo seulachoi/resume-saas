@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 const LS_RESUME_KEY = "resumeup_resumeText";
 const LS_JD_KEY = "resumeup_jdText";
 const LS_TRACK_KEY = "resumeup_track";
 const LS_SENIORITY_KEY = "resumeup_seniority";
+const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 
 // ✅ Most popular bundle
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
@@ -161,7 +162,23 @@ export default function MyReportsClient({
   rows: CheckoutRow[];
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number>(Number(credits ?? 0));
+  const betaCheckedRef = useRef(false);
   const completedRows = useMemo(() => rows ?? [], [rows]);
+
+  useEffect(() => {
+    setCreditBalance(Number(credits ?? 0));
+  }, [credits]);
+
+  const refreshCredits = async () => {
+    try {
+      const res = await fetch("/api/auth/credits", { cache: "no-store" });
+      const j = await res.json();
+      if (!res.ok) return;
+      setCreditBalance(Number(j?.balance ?? 0));
+    } catch { }
+  };
 
   const signInWithGoogle = async () => {
     const supabase = supabaseBrowser();
@@ -197,6 +214,16 @@ export default function MyReportsClient({
     }
 
     try {
+      try {
+        const creditsByVariant: Record<string, number> = {
+          "1320252": 1,
+          "1332796": 5,
+          "1332798": 10,
+        };
+        localStorage.setItem("resumeup_last_purchase_credits", String(creditsByVariant[variantId] ?? 1));
+        localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
+      } catch { }
+
       const meRes = await fetch("/api/auth/me", { cache: "no-store" });
       const meJson: AuthMeResponse = await meRes.json();
       if (!meJson.user?.id) {
@@ -235,6 +262,41 @@ export default function MyReportsClient({
     }
   };
 
+  useEffect(() => {
+    if (!signedIn || !BETA_FREE_UNLOCK || betaCheckedRef.current) return;
+    betaCheckedRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/beta/grant-credits", { method: "POST" });
+        const j = await res.json();
+        if (!res.ok) return;
+        if (j?.granted) {
+          setToast(`🎁 Launch offer applied: +${Number(j?.grantedCredits ?? 10)} credits`);
+        }
+        await refreshCredits();
+      } catch { }
+    })();
+  }, [signedIn]);
+
+  useEffect(() => {
+    try {
+      const ts = Number(localStorage.getItem("resumeup_last_purchase_ts") || "0");
+      const c = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
+      if (c > 0 && ts && Date.now() - ts < 10 * 60 * 1000) {
+        setToast(`Credits +${c} added`);
+        localStorage.removeItem("resumeup_last_purchase_ts");
+        localStorage.removeItem("resumeup_last_purchase_credits");
+        refreshCredits();
+      }
+    } catch { }
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   return (
     <main className="min-h-screen bg-white text-slate-900">
       {/* Header (same family as Home/My Reports) */}
@@ -259,7 +321,7 @@ export default function MyReportsClient({
                 >
                   Credits
                   <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
-                    {credits}
+                    {creditBalance}
                   </span>
                   <span className="text-xs underline underline-offset-2">Top up</span>
                 </button>
@@ -301,7 +363,7 @@ export default function MyReportsClient({
                   <div className="text-sm text-white/70 font-semibold">Available credits</div>
 
                   <div className="flex items-end gap-4 flex-wrap">
-                    <div className="text-6xl font-semibold leading-none">{credits}</div>
+                    <div className="text-6xl font-semibold leading-none">{creditBalance}</div>
                     <button
                       type="button"
                       onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
@@ -408,6 +470,14 @@ export default function MyReportsClient({
           </>
         )}
       </div>
+
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-2xl bg-slate-900 text-white px-5 py-3 shadow-lg border border-white/10 text-sm font-semibold">
+            {toast}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
