@@ -200,6 +200,19 @@ function AnimatedBar({
     </div>
   );
 }
+
+function consumeBetaGrantCookie(): number | null {
+  if (typeof document === "undefined") return null;
+  const found = document.cookie
+    .split("; ")
+    .find((x) => x.startsWith("resumeup_beta_granted="));
+  if (!found) return null;
+  const raw = found.split("=")[1] ?? "";
+  const n = Number(decodeURIComponent(raw));
+  document.cookie = "resumeup_beta_granted=; Max-Age=0; Path=/; SameSite=Lax";
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function WhyResumeUpSection() {
   const s = useInViewOnce<HTMLDivElement>(0.25);
   const start = s.seen;
@@ -869,6 +882,15 @@ export default function HomePage() {
     );
 
     return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const granted = consumeBetaGrantCookie();
+    if (granted) {
+      setToast(`🎁 Launch offer applied: +${granted} free credits added!`);
+      refreshCredits();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

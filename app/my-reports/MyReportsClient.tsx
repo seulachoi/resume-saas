@@ -12,6 +12,18 @@ const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 // ✅ Most popular bundle
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
 
+function consumeBetaGrantCookie(): number | null {
+  if (typeof document === "undefined") return null;
+  const found = document.cookie
+    .split("; ")
+    .find((x) => x.startsWith("resumeup_beta_granted="));
+  if (!found) return null;
+  const raw = found.split("=")[1] ?? "";
+  const n = Number(decodeURIComponent(raw));
+  document.cookie = "resumeup_beta_granted=; Max-Age=0; Path=/; SameSite=Lax";
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 type CheckoutRow = {
   id: string;
   created_at: string;
@@ -286,6 +298,14 @@ export default function MyReportsClient({
       }
     })();
   }, [signedIn]);
+
+  useEffect(() => {
+    const granted = consumeBetaGrantCookie();
+    if (granted) {
+      setToast(`🎁 Launch offer applied: +${granted} free credits added!`);
+      refreshCredits();
+    }
+  }, []);
 
   useEffect(() => {
     try {

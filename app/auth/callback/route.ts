@@ -88,6 +88,13 @@ export async function GET(req: Request) {
           } else {
             await sb.from("user_credits").update({ balance: current + amount }).eq("user_id", userId);
           }
+          response.cookies.set("resumeup_beta_granted", String(amount), {
+            path: "/",
+            maxAge: 180,
+            sameSite: "lax",
+            httpOnly: false,
+            secure: url.protocol === "https:",
+          });
         }
       }
     }
