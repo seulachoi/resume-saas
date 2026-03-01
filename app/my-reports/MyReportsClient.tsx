@@ -304,7 +304,7 @@ export default function MyReportsClient({
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
+    const t = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -484,7 +484,7 @@ export default function MyReportsClient({
 
       {toast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
-          <div className="rounded-2xl bg-slate-900 text-white px-5 py-3 shadow-lg border border-white/10 text-sm font-semibold">
+          <div className="rounded-2xl bg-slate-900 text-white px-6 py-3 shadow-lg border border-white/10 text-base md:text-lg font-semibold">
             {toast}
           </div>
         </div>

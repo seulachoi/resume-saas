@@ -894,11 +894,16 @@ export default function HomePage() {
         refreshCredits();
         localStorage.removeItem("resumeup_last_purchase_ts");
         localStorage.removeItem("resumeup_last_purchase_credits");
-        setTimeout(() => setToast(null), 2500);
       }
     } catch { }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const missingSummary = useMemo(() => {
     const gaps = result?.gaps || {};
@@ -1707,7 +1712,7 @@ export default function HomePage() {
       {/* Toast */}
       {toast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50">
-          <div className="rounded-2xl bg-slate-900 text-white px-5 py-3 shadow-lg border border-white/10 text-sm font-semibold">
+          <div className="rounded-2xl bg-slate-900 text-white px-6 py-3 shadow-lg border border-white/10 text-base md:text-lg font-semibold">
             {toast}
           </div>
         </div>
