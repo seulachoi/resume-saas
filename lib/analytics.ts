@@ -18,3 +18,9 @@ export function trackEvent(name: string, params: EventParams = {}) {
   window.gtag!("event", name, params);
 }
 
+export function trackPageView(path: string) {
+  if (!gaEnabled()) return;
+  window.gtag!("event", "page_view", {
+    page_path: path,
+  });
+}
