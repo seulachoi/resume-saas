@@ -436,7 +436,7 @@ function WhyResumeUpSection() {
             <span className="ml-3 transition-transform duration-300 group-hover:translate-x-1">→</span>
           </a>
 
-          <div className="text-sm text-slate-500">Free ATS preview · No credit required</div>
+          <div className="text-sm text-slate-500">Free ATS score preview. No credit required.</div>
         </div>
       </div>
     </section>
@@ -1721,6 +1721,8 @@ export default function HomePage() {
       {/* FOOTER */}
       <footer className="border-t border-slate-200 py-10 text-center text-sm text-slate-500">
         <div className="space-x-4">
+          <a href="/ats-resume-checker">ATS Resume Checker</a>
+          <a href="/resume-keyword-checker">Resume Keyword Checker</a>
           <a href="/terms">Terms</a>
           <a href="/privacy">Privacy</a>
           <a href="/refund">Refund</a>

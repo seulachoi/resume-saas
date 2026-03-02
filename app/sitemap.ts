@@ -17,6 +17,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.6,
     },
     {
+      url: `${siteUrl}/ats-resume-checker`,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
+      url: `${siteUrl}/resume-keyword-checker`,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
       url: `${siteUrl}/terms`,
       lastModified: new Date(),
       changeFrequency: "monthly",
@@ -36,4 +48,3 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 }
-
