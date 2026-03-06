@@ -1718,17 +1718,52 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="border-t border-slate-200 py-10 text-center text-sm text-slate-500">
-        <div className="space-x-4">
-          <a href="/ats-resume-checker">ATS Resume Checker</a>
-          <a href="/resume-keyword-checker">Resume Keyword Checker</a>
-          <a href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/refund">Refund</a>
-          <a href="/contact">Contact</a>
+      {/* SEO Landing Hub Footer */}
+      <footer className="border-t border-slate-800 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-slate-200">
+        <div className="mx-auto max-w-6xl px-6 py-14">
+          <div className="text-3xl font-semibold tracking-tight">ResumeUp</div>
+          <p className="mt-3 text-slate-300">Get the job you deserve, faster.</p>
+
+          <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-10 text-sm">
+            <div>
+              <div className="text-base font-semibold text-white">Improve your resume</div>
+              <div className="mt-4 space-y-3">
+                <a href="/ats-resume-checker" className="block hover:text-emerald-300">ATS Resume Checker</a>
+                <a href="/resume-keyword-checker" className="block hover:text-emerald-300">Resume Keyword Checker</a>
+                <a href="/product-manager-ats-resume" className="block hover:text-emerald-300">Product Manager ATS Resume</a>
+                <a href="/data-analyst-ats-resume" className="block hover:text-emerald-300">Data Analyst ATS Resume</a>
+                <a href="/software-engineer-ats-resume" className="block hover:text-emerald-300">Software Engineer ATS Resume</a>
+                <a href="/marketing-ats-resume" className="block hover:text-emerald-300">Marketing ATS Resume</a>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-base font-semibold text-white">Write your resume</div>
+              <div className="mt-4 space-y-3">
+                <a href="/sales-resume-ats" className="block hover:text-emerald-300">Sales Resume ATS</a>
+                <a href="/consulting-resume-ats" className="block hover:text-emerald-300">Consulting Resume ATS</a>
+                <a href="/ats-resume-templates" className="block hover:text-emerald-300">ATS Resume Templates Guide</a>
+                <a href="/resume-optimizer" className="block hover:text-emerald-300">Resume Optimizer</a>
+                <a href="/#analyzer" className="block font-semibold text-emerald-300 hover:text-emerald-200">Score my resume now</a>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-base font-semibold text-white">Get to know us</div>
+              <div className="mt-4 space-y-3">
+                <a href="/my-reports" className="block hover:text-emerald-300">My Reports</a>
+                <a href="/contact" className="block hover:text-emerald-300">Contact</a>
+                <a href="/privacy" className="block hover:text-emerald-300">Privacy</a>
+                <a href="/terms" className="block hover:text-emerald-300">Terms</a>
+                <a href="/refund" className="block hover:text-emerald-300">Refund</a>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-12 pt-6 border-t border-white/10 text-xs text-slate-400">
+            © {new Date().getFullYear()} ResumeUp
+          </div>
         </div>
-        <div className="mt-4">© {new Date().getFullYear()} ResumeUp</div>
       </footer>
 
       {/* Toast */}
