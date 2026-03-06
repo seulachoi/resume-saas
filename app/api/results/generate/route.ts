@@ -109,6 +109,7 @@ export async function POST(req: Request) {
     const hasResume = typeof session.resume_text === "string" && session.resume_text.length >= 200;
     const hasJd = typeof session.jd_text === "string" && session.jd_text.length >= 200;
     if (!hasResume || !hasJd) {
+      const creditsAdded = Math.max(0, Number(session.credits ?? 0));
       await sb
         .from("checkout_sessions")
         .update({
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
         eventType: "success",
         durationMs: Date.now() - startedAt,
       });
-      return NextResponse.json({ ok: true, topupOnly: true });
+      return NextResponse.json({ ok: true, topupOnly: true, creditsAdded });
     }
 
     // credit-session flow already deducted 1 credit at session creation time.

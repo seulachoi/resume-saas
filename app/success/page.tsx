@@ -72,6 +72,13 @@ export default function SuccessPage() {
 
     // If this was a top-up only purchase, go to My Results (credits)
     if (data?.topupOnly) {
+      try {
+        const added = Math.max(0, Number(data?.creditsAdded ?? 0));
+        if (added > 0) {
+          localStorage.setItem("resumeup_last_purchase_credits", String(added));
+          localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
+        }
+      } catch { }
       window.location.href = "/my-reports";
       return;
     }
@@ -100,8 +107,7 @@ export default function SuccessPage() {
       const variantId = localStorage.getItem("resumeup_last_checkout_variant");
       const t = localStorage.getItem("resumeup_last_checkout_topup_only");
       const topupOnly = t === null ? null : t === "true";
-      const c = Number(localStorage.getItem("resumeup_last_purchase_credits") || "0");
-      const creditsAdded = c > 0 ? c : null;
+      const creditsAdded = null;
       const track = localStorage.getItem("resumeup_track");
       const seniority = localStorage.getItem("resumeup_seniority");
       trackEvent("purchase_success", {

@@ -8,6 +8,7 @@ const LS_JD_KEY = "resumeup_jdText";
 const LS_TRACK_KEY = "resumeup_track";
 const LS_SENIORITY_KEY = "resumeup_seniority";
 const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
+const LEMON_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_LEMON_CHECKOUT_ENABLED === "true";
 
 // ✅ Most popular bundle
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
@@ -220,6 +221,10 @@ export default function MyReportsClient({
 
   const topUpCreditsNow = async (variantId = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
+    if (!LEMON_CHECKOUT_ENABLED) {
+      setToast("🎁 Beta mode: paid top-up is temporarily disabled.");
+      return;
+    }
     if (!signedIn) {
       await signInWithGoogle();
       return;
@@ -227,13 +232,8 @@ export default function MyReportsClient({
 
     try {
       try {
-        const creditsByVariant: Record<string, number> = {
-          "1320252": 1,
-          "1332796": 5,
-          "1332798": 10,
-        };
-        localStorage.setItem("resumeup_last_purchase_credits", String(creditsByVariant[variantId] ?? 1));
-        localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
+        localStorage.removeItem("resumeup_last_purchase_credits");
+        localStorage.removeItem("resumeup_last_purchase_ts");
       } catch { }
 
       const meRes = await fetch("/api/auth/me", { cache: "no-store" });
@@ -345,8 +345,14 @@ export default function MyReportsClient({
               <>
                 <button
                   type="button"
+                  disabled={!LEMON_CHECKOUT_ENABLED}
                   onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
-                  className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                  className={[
+                    "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border",
+                    LEMON_CHECKOUT_ENABLED
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                      : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed",
+                  ].join(" ")}
                 >
                   Credits
                   <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
@@ -395,10 +401,16 @@ export default function MyReportsClient({
                     <div className="text-6xl font-semibold leading-none">{creditBalance}</div>
                     <button
                       type="button"
+                      disabled={!LEMON_CHECKOUT_ENABLED}
                       onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
-                      className="text-sm font-semibold text-emerald-300 hover:text-emerald-200 underline underline-offset-4"
+                      className={[
+                        "text-sm font-semibold underline underline-offset-4",
+                        LEMON_CHECKOUT_ENABLED
+                          ? "text-emerald-300 hover:text-emerald-200"
+                          : "text-slate-400 cursor-not-allowed no-underline",
+                      ].join(" ")}
                     >
-                      + Top up credits
+                      {LEMON_CHECKOUT_ENABLED ? "+ Top up credits" : "Top up (Coming soon)"}
                     </button>
                   </div>
 

@@ -24,6 +24,7 @@ const LS_SENIORITY_KEY = "resumeup_seniority";
 const DEFAULT_TOPUP_VARIANT_ID = "1332796";
 const BETA_FREE_UNLOCK = process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK === "true";
 const BETA_FREE_UNLOCK_CREDITS = Number(process.env.NEXT_PUBLIC_BETA_FREE_UNLOCK_CREDITS || "10");
+const LEMON_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_LEMON_CHECKOUT_ENABLED === "true";
 
 /** ===================== Role Context (UI) ===================== */
 const TRACKS: { key: Track; label: string }[] = [
@@ -590,6 +591,10 @@ export default function HomePage() {
   // ✅ Top up credits: logout -> login -> Lemon checkout, login -> Lemon checkout
   const topUpCreditsNow = async (variantId: string = DEFAULT_TOPUP_VARIANT_ID) => {
     setError(null);
+    if (!LEMON_CHECKOUT_ENABLED) {
+      setToast("🎁 Beta mode: paid top-up is temporarily disabled.");
+      return;
+    }
     const user = await getCurrentUser();
 
     // 1) 비로그인: 로그인 먼저 → 로그인 후 바로 결제 이어가기
@@ -607,15 +612,9 @@ export default function HomePage() {
     const safeResume = resumeText && resumeText.length >= 200 ? resumeText : dummy;
     const safeJd = jdText && jdText.length >= 200 ? jdText : dummy;
 
-    // toast after redirect
     try {
-      const creditsByVariant: Record<string, number> = {
-        "1320252": 1,
-        "1332796": 5,
-        "1332798": 10,
-      };
-      localStorage.setItem("resumeup_last_purchase_credits", String(creditsByVariant[variantId] ?? 1));
-      localStorage.setItem("resumeup_last_purchase_ts", String(Date.now()));
+      localStorage.removeItem("resumeup_last_purchase_credits");
+      localStorage.removeItem("resumeup_last_purchase_ts");
     } catch { }
 
     try {
@@ -679,6 +678,10 @@ export default function HomePage() {
       const effectiveBalance = balance ?? (typeof credits === "number" ? credits : 0);
       if (effectiveBalance > 0) {
         await startFullWithCredit();
+        return;
+      }
+      if (!LEMON_CHECKOUT_ENABLED) {
+        setError("Paid checkout is temporarily disabled during beta. Please use your launch credits.");
         return;
       }
 
@@ -970,8 +973,14 @@ export default function HomePage() {
 
                 <button
                   type="button"
+                  disabled={!LEMON_CHECKOUT_ENABLED}
                   onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
-                  className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                  className={[
+                    "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border",
+                    LEMON_CHECKOUT_ENABLED
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                      : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed",
+                  ].join(" ")}
                 >
                   Credits
                   <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-white px-2 text-slate-900 border border-slate-200">
@@ -1445,12 +1454,16 @@ export default function HomePage() {
 
                 <button
                   type="button"
+                  disabled={!LEMON_CHECKOUT_ENABLED}
                   onClick={() => topUpCreditsNow(DEFAULT_TOPUP_VARIANT_ID)}
-                  className="rounded-2xl px-8 py-4 text-base font-semibold
-                  bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500
-                  text-white shadow-lg transition"
+                  className={[
+                    "rounded-2xl px-8 py-4 text-base font-semibold shadow-lg transition",
+                    LEMON_CHECKOUT_ENABLED
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
+                      : "bg-slate-200 text-slate-500 cursor-not-allowed shadow-none",
+                  ].join(" ")}
                 >
-                  Top up credits
+                  {LEMON_CHECKOUT_ENABLED ? "Top up credits" : "Top up (Coming soon)"}
                 </button>
               </>
             )}
@@ -1700,15 +1713,18 @@ export default function HomePage() {
                   <div className="mt-auto pt-6">
                     <button
                       type="button"
+                      disabled={!LEMON_CHECKOUT_ENABLED}
                       onClick={() => topUpCreditsNow(plan.id)}
                       className={[
                         "w-full rounded-2xl px-6 py-4 text-base font-semibold transition",
-                        isPopular
+                        !LEMON_CHECKOUT_ENABLED
+                          ? "bg-slate-300 text-slate-600 cursor-not-allowed shadow-none"
+                          : isPopular
                           ? "bg-gradient-to-r from-emerald-400 to-teal-300 text-slate-950 hover:from-emerald-300 hover:to-teal-200 shadow-lg shadow-emerald-500/25"
                           : "bg-white/10 text-white hover:bg-white/15 border border-white/20",
                       ].join(" ")}
                     >
-                      Top up credits
+                      {LEMON_CHECKOUT_ENABLED ? "Top up credits" : "Top up (Coming soon)"}
                     </button>
                   </div>
                 </div>
@@ -1805,12 +1821,17 @@ export default function HomePage() {
               ].map((plan) => (
                 <button
                   key={plan.id}
+                  disabled={!LEMON_CHECKOUT_ENABLED}
                   onClick={() => {
+                    if (!LEMON_CHECKOUT_ENABLED) return;
                     setShowBundleModal(false);
                     topUpCreditsNow(plan.id);
                   }}
-                  className={`rounded-2xl border p-4 text-left hover:shadow-sm transition ${plan.id === "1332796" ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200"
-                    }`}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    !LEMON_CHECKOUT_ENABLED
+                      ? "border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : `hover:shadow-sm ${plan.id === "1332796" ? "border-slate-900 ring-2 ring-slate-900/10" : "border-slate-200"}`
+                  }`}
                 >
                   <div className="text-sm font-semibold text-slate-900">{plan.label}</div>
                   <div className="text-2xl font-semibold text-slate-900 mt-1">{plan.price}</div>

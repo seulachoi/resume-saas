@@ -36,6 +36,16 @@ function isSeniority(x: any): x is Seniority {
 
 export async function POST(req: Request) {
   try {
+    const lemonCheckoutEnabled =
+      process.env.LEMON_CHECKOUT_ENABLED === "true" ||
+      process.env.NEXT_PUBLIC_LEMON_CHECKOUT_ENABLED === "true";
+    if (!lemonCheckoutEnabled) {
+      return NextResponse.json(
+        { error: "Checkout is temporarily disabled in beta mode" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
 
     const resumeText = String(body?.resumeText ?? "");
